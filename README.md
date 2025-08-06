@@ -52,6 +52,11 @@ export DB_PASSWORD=your_password
 
 ## Building and Running
 
+### Start the database
+```bash
+docker-compose up -d
+```
+
 ### Build the Application
 ```bash
 ./gradlew build

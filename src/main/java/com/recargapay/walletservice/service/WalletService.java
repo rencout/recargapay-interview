@@ -10,11 +10,12 @@ import com.recargapay.walletservice.repository.TransactionRepository;
 import com.recargapay.walletservice.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -39,13 +40,13 @@ public class WalletService {
     public BalanceResponse getCurrentBalance(UUID walletId) {
         log.info("Getting current balance for wallet: {}", walletId);
         Wallet wallet = findWalletById(walletId);
+        BigDecimal currentBalance = formatBigDecimal(wallet.getBalance());
+        log.info("Current balance for wallet {}: {}", walletId, currentBalance);
         
         BalanceResponse response = new BalanceResponse();
         response.setWalletId(wallet.getId());
-        response.setBalance(wallet.getBalance());
-        response.setBalanceAfter(wallet.getBalance());
-        
-        log.info("Current balance for wallet {}: {}", walletId, wallet.getBalance());
+        response.setBalance(currentBalance);
+        response.setBalanceAfter(currentBalance);
         return response;
     }
 
@@ -53,15 +54,16 @@ public class WalletService {
     public BigDecimal getHistoricalBalance(UUID walletId, LocalDateTime timestamp) {
         log.info("Getting historical balance for wallet: {} at timestamp: {}", walletId, timestamp);
         
-        // Try to find the last transaction before or at the timestamp
+        // Find the last transaction before or at the given timestamp
         var lastTransaction = transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp);
         
         if (lastTransaction.isPresent()) {
-            log.info("Found last transaction, returning balanceAfter: {}", lastTransaction.get().getBalanceAfter());
-            return lastTransaction.get().getBalanceAfter();
+            BigDecimal balance = formatBigDecimal(lastTransaction.get().getBalanceAfter());
+            log.info("Historical balance for wallet {} at {}: {}", walletId, timestamp, balance);
+            return balance;
         } else {
-            // If no transaction found, calculate from sum of all transactions up to timestamp
-            BigDecimal calculatedBalance = transactionRepository.sumTransactionsUpTo(walletId, timestamp);
+            // If no transaction found, calculate balance from all transactions up to timestamp
+            BigDecimal calculatedBalance = formatBigDecimal(transactionRepository.sumTransactionsUpTo(walletId, timestamp));
             log.info("No transaction found, calculated balance: {}", calculatedBalance);
             return calculatedBalance;
         }
@@ -73,8 +75,7 @@ public class WalletService {
         
         return executeWithRetry(() -> {
             Wallet wallet = findWalletById(walletId);
-            BigDecimal newBalance = wallet.getBalance().add(amount);
-            
+            BigDecimal newBalance = formatBigDecimal(wallet.getBalance().add(amount));
             wallet.setBalance(newBalance);
             Wallet savedWallet = walletRepository.save(wallet);
             
@@ -106,7 +107,7 @@ public class WalletService {
                 );
             }
             
-            BigDecimal newBalance = wallet.getBalance().subtract(amount);
+            BigDecimal newBalance = formatBigDecimal(wallet.getBalance().subtract(amount));
             wallet.setBalance(newBalance);
             Wallet savedWallet = walletRepository.save(wallet);
             
@@ -144,12 +145,12 @@ public class WalletService {
             }
             
             // Update source wallet
-            BigDecimal sourceNewBalance = sourceWallet.getBalance().subtract(amount);
+            BigDecimal sourceNewBalance = formatBigDecimal(sourceWallet.getBalance().subtract(amount));
             sourceWallet.setBalance(sourceNewBalance);
             walletRepository.save(sourceWallet);
             
             // Update target wallet
-            BigDecimal targetNewBalance = targetWallet.getBalance().add(amount);
+            BigDecimal targetNewBalance = formatBigDecimal(targetWallet.getBalance().add(amount));
             targetWallet.setBalance(targetNewBalance);
             walletRepository.save(targetWallet);
             
@@ -170,6 +171,10 @@ public class WalletService {
             .orElseThrow(() -> new WalletNotFoundException("Wallet not found with ID: " + walletId));
     }
 
+    private BigDecimal formatBigDecimal(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
     private <T> T executeWithRetry(java.util.function.Supplier<T> operation) {
         int maxRetries = 3;
         int retryCount = 0;
@@ -177,7 +182,7 @@ public class WalletService {
         while (retryCount < maxRetries) {
             try {
                 return operation.get();
-            } catch (ObjectOptimisticLockingFailureException e) {
+            } catch (OptimisticLockingFailureException e) {
                 retryCount++;
                 if (retryCount >= maxRetries) {
                     log.error("Max retries reached for optimistic locking failure", e);

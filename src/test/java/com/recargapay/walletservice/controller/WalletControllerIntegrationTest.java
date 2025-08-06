@@ -251,7 +251,7 @@ class WalletControllerIntegrationTest {
         transferRequest.setTargetWalletId(UUID.fromString(wallet2Id));
         transferRequest.setAmount(BigDecimal.valueOf(30.00));
 
-        mockMvc.perform(post("/api/transfer")
+        mockMvc.perform(post("/api/wallets/transfer")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
                 .andExpect(status().isOk());
