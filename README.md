@@ -67,7 +67,7 @@ docker-compose up -d
 ./gradlew bootRun
 ```
 
-The application will start on `http://localhost:8080`
+The application will start on ` http://localhost:8080/swagger-ui.html`
 
 ### Run Tests
 ```bash
