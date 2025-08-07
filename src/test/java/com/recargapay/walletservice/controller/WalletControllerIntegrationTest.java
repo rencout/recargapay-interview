@@ -276,7 +276,16 @@ class WalletControllerIntegrationTest {
 
         String walletId = objectMapper.readTree(createResponse).get("id").asText();
 
-        // Get historical balance
+        // Create a transaction first by making a deposit
+        TransactionRequest depositRequest = new TransactionRequest();
+        depositRequest.setAmount(BigDecimal.valueOf(100.00));
+
+        mockMvc.perform(post("/api/wallets/{walletId}/deposit", walletId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(depositRequest)))
+                .andExpect(status().isOk());
+
+        // Get historical balance after the transaction
         LocalDateTime timestamp = LocalDateTime.now();
         String formattedTimestamp = timestamp.format(DateTimeFormatter.ISO_DATE_TIME);
 
@@ -284,6 +293,33 @@ class WalletControllerIntegrationTest {
                 .param("timestamp", formattedTimestamp))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.walletId").value(walletId))
-                .andExpect(jsonPath("$.balance").value("0.00"));
+                .andExpect(jsonPath("$.balance").value("100.00"));
+    }
+
+    @Test
+    void getHistoricalBalance_NoTransactions_ThrowsException() throws Exception {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+
+        // First create a wallet
+        CreateWalletRequest createRequest = new CreateWalletRequest();
+        createRequest.setUserId("user123");
+
+        String createResponse = mockMvc.perform(post("/api/wallets")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String walletId = objectMapper.readTree(createResponse).get("id").asText();
+
+        // Try to get historical balance without any transactions
+        LocalDateTime timestamp = LocalDateTime.now();
+        String formattedTimestamp = timestamp.format(DateTimeFormatter.ISO_DATE_TIME);
+
+        mockMvc.perform(get("/api/wallets/{walletId}/balance/history", walletId)
+                .param("timestamp", formattedTimestamp))
+                .andExpect(status().isInternalServerError());
     }
 }

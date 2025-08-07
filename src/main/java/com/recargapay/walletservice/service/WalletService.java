@@ -57,28 +57,20 @@ public class WalletService {
             throw new InvalidTimestampException("Cannot get historical balance for future timestamp: " + timestamp);
         }
         
-        // First, check if wallet exists and get its creation date
-        Wallet wallet = findWalletById(walletId);
-        
-        // If wallet was created after the timestamp, return zero
-        if (wallet.getCreatedAt().isAfter(timestamp)) {
-            log.info("Wallet {} was created after timestamp {}, returning zero balance", walletId, timestamp);
-            return MoneyUtils.zero();
-        }
-        
         // Find the last transaction before or at the given timestamp
         var lastTransaction = transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp);
-        
-        if (lastTransaction.isPresent()) {
-            // Use the balance after the last transaction
-            BigDecimal balance = MoneyUtils.format(lastTransaction.get().getBalanceAfter());
-            log.info("Historical balance for wallet {} at {}: {} (from transaction)", walletId, timestamp, balance);
+
+        // Try to use the balance after the last transaction (high-performance path)
+        BigDecimal balanceAfter = lastTransaction.get().getBalanceAfter();
+        if (balanceAfter != null) {
+            BigDecimal balance = MoneyUtils.format(balanceAfter);
+            log.info("Historical balance for wallet {} at {}: {} (from transaction balanceAfter)", walletId, timestamp, balance);
             return balance;
         } else {
-            // No transactions found - return initial balance (zero for new wallets)
-            BigDecimal initialBalance = MoneyUtils.zero();
-            log.info("No transaction found for wallet {} at {}, returning initial balance: {}", walletId, timestamp, initialBalance);
-            return initialBalance;
+            // Fallback: calculate balance from transaction history if balanceAfter is null
+            BigDecimal calculatedBalance = MoneyUtils.format(transactionRepository.sumTransactionsUpTo(walletId, timestamp));
+            log.info("Historical balance for wallet {} at {}: {} (calculated from transaction history)", walletId, timestamp, calculatedBalance);
+            return calculatedBalance;
         }
     }
 
