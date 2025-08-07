@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import com.recargapay.walletservice.exception.InvalidTimestampException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -24,6 +25,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InsufficientFundsException.class)
     public ResponseEntity<ErrorResponse> handleInsufficientFundsException(InsufficientFundsException ex) {
         ErrorResponse error = createErrorResponse(HttpStatus.BAD_REQUEST, "Insufficient funds", ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(InvalidTimestampException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidTimestampException(InvalidTimestampException ex) {
+        ErrorResponse error = createErrorResponse(HttpStatus.BAD_REQUEST, "Invalid timestamp", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 

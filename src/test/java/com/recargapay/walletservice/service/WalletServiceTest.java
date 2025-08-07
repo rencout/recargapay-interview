@@ -52,6 +52,7 @@ class WalletServiceTest {
         wallet = new Wallet(userId);
         wallet.setId(walletId);
         wallet.setBalance(BigDecimal.valueOf(100.00));
+        wallet.setCreatedAt(LocalDateTime.now().minusDays(1)); // Set a past creation date
     }
 
     @Test
@@ -126,6 +127,7 @@ class WalletServiceTest {
                 .thenReturn(Optional.empty());
         when(transactionRepository.sumTransactionsUpTo(walletId, timestamp))
                 .thenReturn(BigDecimal.valueOf(75.00));
+        when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
 
         // When
         BigDecimal result = walletService.getHistoricalBalance(walletId, timestamp);
@@ -205,8 +207,8 @@ class WalletServiceTest {
         targetWallet.setId(targetWalletId);
         targetWallet.setBalance(BigDecimal.valueOf(50.00));
 
-        when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
-        when(walletRepository.findById(targetWalletId)).thenReturn(Optional.of(targetWallet));
+        when(walletRepository.findByIdWithLock(walletId)).thenReturn(Optional.of(wallet));
+        when(walletRepository.findByIdWithLock(targetWalletId)).thenReturn(Optional.of(targetWallet));
         when(walletRepository.save(any(Wallet.class))).thenReturn(wallet);
         when(transactionRepository.save(any(Transaction.class))).thenReturn(new Transaction());
 
@@ -237,8 +239,8 @@ class WalletServiceTest {
         Wallet targetWallet = new Wallet("user456");
         targetWallet.setId(targetWalletId);
 
-        when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
-        when(walletRepository.findById(targetWalletId)).thenReturn(Optional.of(targetWallet));
+        when(walletRepository.findByIdWithLock(walletId)).thenReturn(Optional.of(wallet));
+        when(walletRepository.findByIdWithLock(targetWalletId)).thenReturn(Optional.of(targetWallet));
 
         // When & Then
         assertThrows(InsufficientFundsException.class, () -> walletService.transfer(walletId, targetWalletId, amount));

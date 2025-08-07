@@ -6,6 +6,7 @@ import com.recargapay.walletservice.entity.TransactionType;
 import com.recargapay.walletservice.entity.Wallet;
 import com.recargapay.walletservice.exception.InsufficientFundsException;
 import com.recargapay.walletservice.exception.WalletNotFoundException;
+import com.recargapay.walletservice.exception.InvalidTimestampException;
 import com.recargapay.walletservice.mapper.WalletMapper;
 import com.recargapay.walletservice.repository.TransactionRepository;
 import com.recargapay.walletservice.repository.WalletRepository;
@@ -52,17 +53,32 @@ public class WalletService {
     public BigDecimal getHistoricalBalance(UUID walletId, LocalDateTime timestamp) {
         log.info("Getting historical balance for wallet: {} at timestamp: {}", walletId, timestamp);
         
+        // Validate timestamp is not in the future
+        if (timestamp.isAfter(LocalDateTime.now())) {
+            throw new InvalidTimestampException("Cannot get historical balance for future timestamp: " + timestamp);
+        }
+        
         // Find the last transaction before or at the given timestamp
         var lastTransaction = transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp);
         
         if (lastTransaction.isPresent()) {
+            // Use the balance after the last transaction
             BigDecimal balance = MoneyUtils.format(lastTransaction.get().getBalanceAfter());
-            log.info("Historical balance for wallet {} at {}: {}", walletId, timestamp, balance);
+            log.info("Historical balance for wallet {} at {}: {} (from transaction)", walletId, timestamp, balance);
             return balance;
         } else {
-            // If no transaction found, calculate balance from all transactions up to timestamp
+            // No transactions found - check if wallet exists and return its initial balance
+            Wallet wallet = findWalletById(walletId);
+            
+            // If wallet was created after the timestamp, return zero
+            if (wallet.getCreatedAt().isAfter(timestamp)) {
+                log.info("Wallet {} was created after timestamp {}, returning zero balance", walletId, timestamp);
+                return MoneyUtils.zero();
+            }
+            
+            // Calculate balance from all transactions up to timestamp
             BigDecimal calculatedBalance = MoneyUtils.format(transactionRepository.sumTransactionsUpTo(walletId, timestamp));
-            log.info("No transaction found, calculated balance: {}", calculatedBalance);
+            log.info("No transaction found for wallet {} at {}, calculated balance: {}", walletId, timestamp, calculatedBalance);
             return calculatedBalance;
         }
     }
@@ -87,10 +103,18 @@ public class WalletService {
             throw new IllegalArgumentException(WalletConstants.SAME_WALLET_ERROR);
         }
         
+        if (amount.compareTo(WalletConstants.MIN_TRANSACTION_AMOUNT) < 0) {
+            throw new IllegalArgumentException("Transfer amount must be at least " + WalletConstants.MIN_TRANSACTION_AMOUNT);
+        }
+        
         executeWithRetry(() -> {
-            Wallet sourceWallet = findWalletById(sourceWalletId);
-            Wallet targetWallet = findWalletById(targetWalletId);
+            // Load both wallets with pessimistic locking to prevent concurrent modifications
+            Wallet sourceWallet = walletRepository.findByIdWithLock(sourceWalletId)
+                .orElseThrow(() -> new WalletNotFoundException("Source wallet not found with ID: " + sourceWalletId));
+            Wallet targetWallet = walletRepository.findByIdWithLock(targetWalletId)
+                .orElseThrow(() -> new WalletNotFoundException("Target wallet not found with ID: " + targetWalletId));
             
+            // Validate source wallet has sufficient funds
             if (sourceWallet.getBalance().compareTo(amount) < 0) {
                 throw new InsufficientFundsException(
                     String.format(WalletConstants.INSUFFICIENT_FUNDS_SOURCE_FORMAT, 
@@ -98,24 +122,42 @@ public class WalletService {
                 );
             }
             
-            // Update source wallet
+            // Calculate new balances
             BigDecimal sourceNewBalance = MoneyUtils.subtract(sourceWallet.getBalance(), amount);
-            sourceWallet.setBalance(sourceNewBalance);
-            walletRepository.save(sourceWallet);
-            
-            // Update target wallet
             BigDecimal targetNewBalance = MoneyUtils.add(targetWallet.getBalance(), amount);
+            
+            // Update both wallets atomically
+            sourceWallet.setBalance(sourceNewBalance);
             targetWallet.setBalance(targetNewBalance);
-            walletRepository.save(targetWallet);
             
-            // Create transaction records
-            Transaction sourceTransaction = new Transaction(sourceWallet, TransactionType.TRANSFER_OUT, amount, sourceNewBalance, targetWalletId);
-            Transaction targetTransaction = new Transaction(targetWallet, TransactionType.TRANSFER_IN, amount, targetNewBalance, sourceWalletId);
+            // Save both wallets
+            Wallet savedSourceWallet = walletRepository.save(sourceWallet);
+            Wallet savedTargetWallet = walletRepository.save(targetWallet);
             
+            // Create transaction records for both wallets
+            Transaction sourceTransaction = new Transaction(
+                savedSourceWallet, 
+                TransactionType.TRANSFER_OUT, 
+                amount, 
+                sourceNewBalance, 
+                targetWalletId
+            );
+            
+            Transaction targetTransaction = new Transaction(
+                savedTargetWallet, 
+                TransactionType.TRANSFER_IN, 
+                amount, 
+                targetNewBalance, 
+                sourceWalletId
+            );
+            
+            // Save both transactions
             transactionRepository.save(sourceTransaction);
             transactionRepository.save(targetTransaction);
             
-            log.info("Transfer completed. Source balance: {}, Target balance: {}", sourceNewBalance, targetNewBalance);
+            log.info("Transfer completed successfully. Source balance: {}, Target balance: {}", 
+                    sourceNewBalance, targetNewBalance);
+            
             return null;
         });
     }
