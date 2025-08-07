@@ -6,8 +6,10 @@ import com.recargapay.walletservice.entity.TransactionType;
 import com.recargapay.walletservice.entity.Wallet;
 import com.recargapay.walletservice.exception.InsufficientFundsException;
 import com.recargapay.walletservice.exception.WalletNotFoundException;
+import com.recargapay.walletservice.mapper.WalletMapper;
 import com.recargapay.walletservice.repository.TransactionRepository;
 import com.recargapay.walletservice.repository.WalletRepository;
+import com.recargapay.walletservice.util.MoneyUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,7 +18,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,6 +34,9 @@ class WalletServiceTest {
 
     @Mock
     private TransactionRepository transactionRepository;
+
+    @Mock
+    private WalletMapper walletMapper;
 
     @InjectMocks
     private WalletService walletService;
@@ -72,6 +76,11 @@ class WalletServiceTest {
     void getCurrentBalance_Success() {
         // Given
         when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
+        BalanceResponse expectedResponse = new BalanceResponse();
+        expectedResponse.setWalletId(walletId);
+        expectedResponse.setBalance(MoneyUtils.format(BigDecimal.valueOf(100.00)));
+        expectedResponse.setBalanceAfter(MoneyUtils.format(BigDecimal.valueOf(100.00)));
+        when(walletMapper.toBalanceResponse(wallet)).thenReturn(expectedResponse);
 
         // When
         BalanceResponse result = walletService.getCurrentBalance(walletId);
@@ -79,8 +88,8 @@ class WalletServiceTest {
         // Then
         assertNotNull(result);
         assertEquals(walletId, result.getWalletId());
-        assertEquals(BigDecimal.valueOf(100.00).setScale(2, RoundingMode.HALF_UP), result.getBalance());
-        assertEquals(BigDecimal.valueOf(100.00).setScale(2, RoundingMode.HALF_UP), result.getBalanceAfter());
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(100.00)), result.getBalance());
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(100.00)), result.getBalanceAfter());
     }
 
     @Test
@@ -104,7 +113,7 @@ class WalletServiceTest {
         BigDecimal result = walletService.getHistoricalBalance(walletId, timestamp);
 
         // Then
-        assertEquals(BigDecimal.valueOf(150.00).setScale(2, RoundingMode.HALF_UP), result);
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(150.00)), result);
         verify(transactionRepository).findLastTransactionBeforeOrAt(walletId, timestamp);
         verify(transactionRepository, never()).sumTransactionsUpTo(any(), any());
     }
@@ -122,7 +131,7 @@ class WalletServiceTest {
         BigDecimal result = walletService.getHistoricalBalance(walletId, timestamp);
 
         // Then
-        assertEquals(BigDecimal.valueOf(75.00).setScale(2, RoundingMode.HALF_UP), result);
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(75.00)), result);
         verify(transactionRepository).findLastTransactionBeforeOrAt(walletId, timestamp);
         verify(transactionRepository).sumTransactionsUpTo(walletId, timestamp);
     }
@@ -134,6 +143,11 @@ class WalletServiceTest {
         when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
         when(walletRepository.save(any(Wallet.class))).thenReturn(wallet);
         when(transactionRepository.save(any(Transaction.class))).thenReturn(new Transaction());
+        
+        BalanceResponse expectedResponse = new BalanceResponse();
+        expectedResponse.setWalletId(walletId);
+        expectedResponse.setBalanceAfter(MoneyUtils.format(BigDecimal.valueOf(150.00)));
+        when(walletMapper.toBalanceResponse(any(), any(), any())).thenReturn(expectedResponse);
 
         // When
         BalanceResponse result = walletService.deposit(walletId, amount);
@@ -141,7 +155,7 @@ class WalletServiceTest {
         // Then
         assertNotNull(result);
         assertEquals(walletId, result.getWalletId());
-        assertEquals(BigDecimal.valueOf(150.00).setScale(2, RoundingMode.HALF_UP), result.getBalanceAfter());
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(150.00)), result.getBalanceAfter());
         verify(walletRepository).save(any(Wallet.class));
         verify(transactionRepository).save(any(Transaction.class));
     }
@@ -153,6 +167,11 @@ class WalletServiceTest {
         when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
         when(walletRepository.save(any(Wallet.class))).thenReturn(wallet);
         when(transactionRepository.save(any(Transaction.class))).thenReturn(new Transaction());
+        
+        BalanceResponse expectedResponse = new BalanceResponse();
+        expectedResponse.setWalletId(walletId);
+        expectedResponse.setBalanceAfter(MoneyUtils.format(BigDecimal.valueOf(70.00)));
+        when(walletMapper.toBalanceResponse(any(), any(), any())).thenReturn(expectedResponse);
 
         // When
         BalanceResponse result = walletService.withdraw(walletId, amount);
@@ -160,7 +179,7 @@ class WalletServiceTest {
         // Then
         assertNotNull(result);
         assertEquals(walletId, result.getWalletId());
-        assertEquals(BigDecimal.valueOf(70.00).setScale(2, RoundingMode.HALF_UP), result.getBalanceAfter());
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(70.00)), result.getBalanceAfter());
         verify(walletRepository).save(any(Wallet.class));
         verify(transactionRepository).save(any(Transaction.class));
     }

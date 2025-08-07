@@ -6,8 +6,11 @@ import com.recargapay.walletservice.entity.TransactionType;
 import com.recargapay.walletservice.entity.Wallet;
 import com.recargapay.walletservice.exception.InsufficientFundsException;
 import com.recargapay.walletservice.exception.WalletNotFoundException;
+import com.recargapay.walletservice.mapper.WalletMapper;
 import com.recargapay.walletservice.repository.TransactionRepository;
 import com.recargapay.walletservice.repository.WalletRepository;
+import com.recargapay.walletservice.util.MoneyUtils;
+import com.recargapay.walletservice.util.WalletConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -15,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -26,6 +28,7 @@ public class WalletService {
 
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
+    private final WalletMapper walletMapper;
 
     @Transactional
     public Wallet createWallet(String userId) {
@@ -40,14 +43,10 @@ public class WalletService {
     public BalanceResponse getCurrentBalance(UUID walletId) {
         log.info("Getting current balance for wallet: {}", walletId);
         Wallet wallet = findWalletById(walletId);
-        BigDecimal currentBalance = formatBigDecimal(wallet.getBalance());
+        BigDecimal currentBalance = MoneyUtils.format(wallet.getBalance());
         log.info("Current balance for wallet {}: {}", walletId, currentBalance);
         
-        BalanceResponse response = new BalanceResponse();
-        response.setWalletId(wallet.getId());
-        response.setBalance(currentBalance);
-        response.setBalanceAfter(currentBalance);
-        return response;
+        return walletMapper.toBalanceResponse(wallet);
     }
 
     @Transactional(readOnly = true)
@@ -58,12 +57,12 @@ public class WalletService {
         var lastTransaction = transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp);
         
         if (lastTransaction.isPresent()) {
-            BigDecimal balance = formatBigDecimal(lastTransaction.get().getBalanceAfter());
+            BigDecimal balance = MoneyUtils.format(lastTransaction.get().getBalanceAfter());
             log.info("Historical balance for wallet {} at {}: {}", walletId, timestamp, balance);
             return balance;
         } else {
             // If no transaction found, calculate balance from all transactions up to timestamp
-            BigDecimal calculatedBalance = formatBigDecimal(transactionRepository.sumTransactionsUpTo(walletId, timestamp));
+            BigDecimal calculatedBalance = MoneyUtils.format(transactionRepository.sumTransactionsUpTo(walletId, timestamp));
             log.info("No transaction found, calculated balance: {}", calculatedBalance);
             return calculatedBalance;
         }
@@ -75,7 +74,7 @@ public class WalletService {
         
         return executeWithRetry(() -> {
             Wallet wallet = findWalletById(walletId);
-            BigDecimal newBalance = formatBigDecimal(wallet.getBalance().add(amount));
+            BigDecimal newBalance = MoneyUtils.add(wallet.getBalance(), amount);
             wallet.setBalance(newBalance);
             Wallet savedWallet = walletRepository.save(wallet);
             
@@ -85,11 +84,7 @@ public class WalletService {
             
             log.info("Deposit completed. New balance: {}", newBalance);
             
-            BalanceResponse response = new BalanceResponse();
-            response.setWalletId(savedWallet.getId());
-            response.setBalance(savedWallet.getBalance());
-            response.setBalanceAfter(newBalance);
-            return response;
+            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
         });
     }
 
@@ -102,12 +97,12 @@ public class WalletService {
             
             if (wallet.getBalance().compareTo(amount) < 0) {
                 throw new InsufficientFundsException(
-                    String.format("Insufficient funds. Current balance: %s, requested amount: %s", 
+                    String.format(WalletConstants.INSUFFICIENT_FUNDS_FORMAT, 
                         wallet.getBalance(), amount)
                 );
             }
             
-            BigDecimal newBalance = formatBigDecimal(wallet.getBalance().subtract(amount));
+            BigDecimal newBalance = MoneyUtils.subtract(wallet.getBalance(), amount);
             wallet.setBalance(newBalance);
             Wallet savedWallet = walletRepository.save(wallet);
             
@@ -117,11 +112,7 @@ public class WalletService {
             
             log.info("Withdrawal completed. New balance: {}", newBalance);
             
-            BalanceResponse response = new BalanceResponse();
-            response.setWalletId(savedWallet.getId());
-            response.setBalance(savedWallet.getBalance());
-            response.setBalanceAfter(newBalance);
-            return response;
+            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
         });
     }
 
@@ -130,7 +121,7 @@ public class WalletService {
         log.info("Processing transfer of {} from wallet {} to wallet {}", amount, sourceWalletId, targetWalletId);
         
         if (sourceWalletId.equals(targetWalletId)) {
-            throw new IllegalArgumentException("Source and target wallets cannot be the same");
+            throw new IllegalArgumentException(WalletConstants.SAME_WALLET_ERROR);
         }
         
         executeWithRetry(() -> {
@@ -139,18 +130,18 @@ public class WalletService {
             
             if (sourceWallet.getBalance().compareTo(amount) < 0) {
                 throw new InsufficientFundsException(
-                    String.format("Insufficient funds in source wallet. Current balance: %s, requested amount: %s", 
+                    String.format(WalletConstants.INSUFFICIENT_FUNDS_SOURCE_FORMAT, 
                         sourceWallet.getBalance(), amount)
                 );
             }
             
             // Update source wallet
-            BigDecimal sourceNewBalance = formatBigDecimal(sourceWallet.getBalance().subtract(amount));
+            BigDecimal sourceNewBalance = MoneyUtils.subtract(sourceWallet.getBalance(), amount);
             sourceWallet.setBalance(sourceNewBalance);
             walletRepository.save(sourceWallet);
             
             // Update target wallet
-            BigDecimal targetNewBalance = formatBigDecimal(targetWallet.getBalance().add(amount));
+            BigDecimal targetNewBalance = MoneyUtils.add(targetWallet.getBalance(), amount);
             targetWallet.setBalance(targetNewBalance);
             walletRepository.save(targetWallet);
             
@@ -171,12 +162,8 @@ public class WalletService {
             .orElseThrow(() -> new WalletNotFoundException("Wallet not found with ID: " + walletId));
     }
 
-    private BigDecimal formatBigDecimal(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
     private <T> T executeWithRetry(java.util.function.Supplier<T> operation) {
-        int maxRetries = 3;
+        int maxRetries = WalletConstants.MAX_RETRIES;
         int retryCount = 0;
         
         while (retryCount < maxRetries) {
@@ -190,7 +177,7 @@ public class WalletService {
                 }
                 log.warn("Optimistic locking failure, retrying... (attempt {}/{})", retryCount, maxRetries);
                 try {
-                    Thread.sleep(100 * retryCount); // Exponential backoff
+                    Thread.sleep(WalletConstants.RETRY_DELAY_MS * retryCount); // Exponential backoff
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Thread interrupted during retry", ie);

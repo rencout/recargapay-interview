@@ -1,5 +1,6 @@
 package com.recargapay.walletservice.entity;
 
+import com.recargapay.walletservice.util.MoneyUtils;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,7 +9,6 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -27,7 +27,7 @@ public class Wallet {
     private String userId;
 
     @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal balance = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private BigDecimal balance = MoneyUtils.zero();
 
     @Version
     @Column(name = "version")
@@ -43,6 +43,6 @@ public class Wallet {
 
     public Wallet(String userId) {
         this.userId = userId;
-        this.balance = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        this.balance = MoneyUtils.zero();
     }
 }

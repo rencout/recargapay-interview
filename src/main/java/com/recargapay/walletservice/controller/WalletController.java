@@ -2,6 +2,7 @@ package com.recargapay.walletservice.controller;
 
 import com.recargapay.walletservice.dto.*;
 import com.recargapay.walletservice.entity.Wallet;
+import com.recargapay.walletservice.mapper.WalletMapper;
 import com.recargapay.walletservice.service.WalletService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class WalletController {
 
     private final WalletService walletService;
+    private final WalletMapper walletMapper;
 
     @PostMapping
     @Operation(summary = "Create a new wallet", description = "Creates a new wallet for the specified user")
@@ -33,14 +35,7 @@ public class WalletController {
         log.info("Creating wallet for user: {}", request.getUserId());
         Wallet wallet = walletService.createWallet(request.getUserId());
         
-        WalletResponse response = new WalletResponse();
-        response.setId(wallet.getId());
-        response.setUserId(wallet.getUserId());
-        response.setBalance(wallet.getBalance());
-        response.setCreatedAt(wallet.getCreatedAt());
-        response.setUpdatedAt(wallet.getUpdatedAt());
-        
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(walletMapper.toResponse(wallet));
     }
 
     @GetMapping("/{walletId}/balance")
@@ -62,12 +57,7 @@ public class WalletController {
         
         BigDecimal historicalBalance = walletService.getHistoricalBalance(walletId, timestamp);
         
-        BalanceResponse response = new BalanceResponse();
-        response.setWalletId(walletId);
-        response.setBalance(historicalBalance);
-        response.setBalanceAfter(historicalBalance);
-        
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(walletMapper.toBalanceResponse(walletId, historicalBalance, historicalBalance));
     }
 
     @PostMapping("/{walletId}/deposit")
