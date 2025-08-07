@@ -32,15 +32,7 @@ public class WalletController {
     public ResponseEntity<WalletResponse> createWallet(@Valid @RequestBody CreateWalletRequest request) {
         log.info("Creating wallet for user: {}", request.getUserId());
         Wallet wallet = walletService.createWallet(request.getUserId());
-        
-        WalletResponse response = new WalletResponse();
-        response.setId(wallet.getId());
-        response.setUserId(wallet.getUserId());
-        response.setBalance(wallet.getBalance());
-        response.setCreatedAt(wallet.getCreatedAt());
-        response.setUpdatedAt(wallet.getUpdatedAt());
-        
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createWalletResponse(wallet));
     }
 
     @GetMapping("/{walletId}/balance")
@@ -61,13 +53,7 @@ public class WalletController {
         log.info("Getting historical balance for wallet: {} at timestamp: {}", walletId, timestamp);
         
         BigDecimal historicalBalance = walletService.getHistoricalBalance(walletId, timestamp);
-        
-        BalanceResponse response = new BalanceResponse();
-        response.setWalletId(walletId);
-        response.setBalance(historicalBalance);
-        response.setBalanceAfter(historicalBalance);
-        
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(createHistoricalBalanceResponse(walletId, historicalBalance));
     }
 
     @PostMapping("/{walletId}/deposit")
@@ -98,5 +84,23 @@ public class WalletController {
         
         walletService.transfer(request.getSourceWalletId(), request.getTargetWalletId(), request.getAmount());
         return ResponseEntity.ok().build();
+    }
+
+    private WalletResponse createWalletResponse(Wallet wallet) {
+        return WalletResponse.builder()
+                .id(wallet.getId())
+                .userId(wallet.getUserId())
+                .balance(wallet.getBalance())
+                .createdAt(wallet.getCreatedAt())
+                .updatedAt(wallet.getUpdatedAt())
+                .build();
+    }
+
+    private BalanceResponse createHistoricalBalanceResponse(UUID walletId, BigDecimal balance) {
+        return BalanceResponse.builder()
+                .walletId(walletId)
+                .balance(balance)
+                .balanceAfter(balance)
+                .build();
     }
 }

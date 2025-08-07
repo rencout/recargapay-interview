@@ -57,7 +57,7 @@ class WalletControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userId").value("user123"))
-                .andExpect(jsonPath("$.balance").value("0.00"))
+                .andExpect(jsonPath("$.balance").value(0))
                 .andExpect(jsonPath("$.id").exists());
     }
 
@@ -96,7 +96,7 @@ class WalletControllerIntegrationTest {
         mockMvc.perform(get("/api/wallets/{walletId}/balance", walletId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.walletId").value(walletId))
-                .andExpect(jsonPath("$.balance").value("0.00"));
+                .andExpect(jsonPath("$.balance").value(0));
     }
 
     @Test
@@ -136,7 +136,7 @@ class WalletControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(depositRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.walletId").value(walletId))
-                .andExpect(jsonPath("$.balanceAfter").value("100.00"));
+                .andExpect(jsonPath("$.balanceAfter").value(100.00));
     }
 
     @Test
@@ -175,7 +175,7 @@ class WalletControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(withdrawRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.walletId").value(walletId))
-                .andExpect(jsonPath("$.balanceAfter").value("70.00"));
+                .andExpect(jsonPath("$.balanceAfter").value(70.00));
     }
 
     @Test
@@ -251,7 +251,7 @@ class WalletControllerIntegrationTest {
         transferRequest.setTargetWalletId(UUID.fromString(wallet2Id));
         transferRequest.setAmount(BigDecimal.valueOf(30.00));
 
-        mockMvc.perform(post("/api/transfer")
+        mockMvc.perform(post("/api/wallets/transfer")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
                 .andExpect(status().isOk());
@@ -283,7 +283,7 @@ class WalletControllerIntegrationTest {
                 .param("timestamp", formattedTimestamp))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.walletId").value(walletId))
-                .andExpect(jsonPath("$.balance").value("0.00"));
+                .andExpect(jsonPath("$.balance").value(0));
     }
 
     @Test
