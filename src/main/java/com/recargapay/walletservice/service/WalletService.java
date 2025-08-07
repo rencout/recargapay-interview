@@ -4,6 +4,7 @@ import com.recargapay.walletservice.dto.BalanceResponse;
 import com.recargapay.walletservice.entity.Transaction;
 import com.recargapay.walletservice.entity.TransactionType;
 import com.recargapay.walletservice.entity.Wallet;
+import com.recargapay.walletservice.exception.FutureTimestampException;
 import com.recargapay.walletservice.exception.InsufficientFundsException;
 import com.recargapay.walletservice.exception.WalletNotFoundException;
 import com.recargapay.walletservice.repository.TransactionRepository;
@@ -53,17 +54,24 @@ public class WalletService {
     public BigDecimal getHistoricalBalance(UUID walletId, LocalDateTime timestamp) {
         log.info("Getting historical balance for wallet: {} at timestamp: {}", walletId, timestamp);
         
-        // Try to find the last transaction before or at the timestamp
+        // Validate timestamp is not in the future
+        if (timestamp.isAfter(LocalDateTime.now())) {
+            throw new FutureTimestampException("Cannot retrieve historical balance for future timestamp: " + timestamp);
+        }
+        
+        // Validate wallet exists
+        findWalletById(walletId);
+        
+        // Find the last transaction before or at the timestamp
         var lastTransaction = transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp);
         
         if (lastTransaction.isPresent()) {
             log.info("Found last transaction, returning balanceAfter: {}", lastTransaction.get().getBalanceAfter());
             return lastTransaction.get().getBalanceAfter();
         } else {
-            // If no transaction found, calculate from sum of all transactions up to timestamp
-            BigDecimal calculatedBalance = transactionRepository.sumTransactionsUpTo(walletId, timestamp);
-            log.info("No transaction found, calculated balance: {}", calculatedBalance);
-            return calculatedBalance;
+            // If no transaction found, return 0 as per requirements
+            log.info("No transaction found before or at timestamp, returning balance: 0");
+            return BigDecimal.ZERO;
         }
     }
 

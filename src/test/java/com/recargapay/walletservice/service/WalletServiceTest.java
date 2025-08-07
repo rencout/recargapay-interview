@@ -4,6 +4,7 @@ import com.recargapay.walletservice.dto.BalanceResponse;
 import com.recargapay.walletservice.entity.Transaction;
 import com.recargapay.walletservice.entity.TransactionType;
 import com.recargapay.walletservice.entity.Wallet;
+import com.recargapay.walletservice.exception.FutureTimestampException;
 import com.recargapay.walletservice.exception.InsufficientFundsException;
 import com.recargapay.walletservice.exception.WalletNotFoundException;
 import com.recargapay.walletservice.repository.TransactionRepository;
@@ -96,6 +97,7 @@ class WalletServiceTest {
         // Given
         LocalDateTime timestamp = LocalDateTime.now();
         Transaction transaction = new Transaction(wallet, TransactionType.DEPOSIT, BigDecimal.valueOf(50.00), BigDecimal.valueOf(150.00));
+        when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
         when(transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp))
                 .thenReturn(Optional.of(transaction));
 
@@ -104,26 +106,48 @@ class WalletServiceTest {
 
         // Then
         assertEquals(BigDecimal.valueOf(150.00), result);
+        verify(walletRepository).findById(walletId);
         verify(transactionRepository).findLastTransactionBeforeOrAt(walletId, timestamp);
-        verify(transactionRepository, never()).sumTransactionsUpTo(any(), any());
     }
 
     @Test
     void getHistoricalBalance_WithoutLastTransaction() {
         // Given
         LocalDateTime timestamp = LocalDateTime.now();
+        when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
         when(transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp))
                 .thenReturn(Optional.empty());
-        when(transactionRepository.sumTransactionsUpTo(walletId, timestamp))
-                .thenReturn(BigDecimal.valueOf(75.00));
 
         // When
         BigDecimal result = walletService.getHistoricalBalance(walletId, timestamp);
 
         // Then
-        assertEquals(BigDecimal.valueOf(75.00), result);
+        assertEquals(BigDecimal.ZERO, result);
+        verify(walletRepository).findById(walletId);
         verify(transactionRepository).findLastTransactionBeforeOrAt(walletId, timestamp);
-        verify(transactionRepository).sumTransactionsUpTo(walletId, timestamp);
+    }
+
+    @Test
+    void getHistoricalBalance_FutureTimestamp() {
+        // Given
+        LocalDateTime futureTimestamp = LocalDateTime.now().plusDays(1);
+
+        // When & Then
+        assertThrows(FutureTimestampException.class, () -> walletService.getHistoricalBalance(walletId, futureTimestamp));
+        verify(walletRepository, never()).findById(any());
+        verify(transactionRepository, never()).findLastTransactionBeforeOrAt(any(), any());
+    }
+
+    @Test
+    void getHistoricalBalance_WalletNotFound() {
+        // Given
+        LocalDateTime timestamp = LocalDateTime.now();
+        when(walletRepository.findById(walletId)).thenReturn(Optional.empty());
+
+        // When & Then
+        assertThrows(WalletNotFoundException.class, () -> walletService.getHistoricalBalance(walletId, timestamp));
+        verify(walletRepository).findById(walletId);
+        verify(transactionRepository, never()).findLastTransactionBeforeOrAt(any(), any());
     }
 
     @Test

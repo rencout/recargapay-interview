@@ -285,4 +285,32 @@ class WalletControllerIntegrationTest {
                 .andExpect(jsonPath("$.walletId").value(walletId))
                 .andExpect(jsonPath("$.balance").value("0.00"));
     }
+
+    @Test
+    void getHistoricalBalance_FutureTimestamp() throws Exception {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+
+        // First create a wallet
+        CreateWalletRequest createRequest = new CreateWalletRequest();
+        createRequest.setUserId("user123");
+
+        String createResponse = mockMvc.perform(post("/api/wallets")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String walletId = objectMapper.readTree(createResponse).get("id").asText();
+
+        // Try to get historical balance with future timestamp
+        LocalDateTime futureTimestamp = LocalDateTime.now().plusDays(1);
+        String formattedFutureTimestamp = futureTimestamp.format(DateTimeFormatter.ISO_DATE_TIME);
+
+        mockMvc.perform(get("/api/wallets/{walletId}/balance/history", walletId)
+                .param("timestamp", formattedFutureTimestamp))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid timestamp"));
+    }
 }

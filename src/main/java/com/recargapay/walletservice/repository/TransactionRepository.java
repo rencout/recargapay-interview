@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -17,9 +16,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     
     @Query("SELECT t FROM Transaction t WHERE t.wallet.id = :walletId AND t.createdAt <= :timestamp ORDER BY t.createdAt DESC LIMIT 1")
     Optional<Transaction> findLastTransactionBeforeOrAt(@Param("walletId") UUID walletId, @Param("timestamp") LocalDateTime timestamp);
-    
-    @Query("SELECT COALESCE(SUM(CASE WHEN t.type IN ('DEPOSIT', 'TRANSFER_IN') THEN t.amount ELSE -t.amount END), 0) FROM Transaction t WHERE t.wallet.id = :walletId AND t.createdAt <= :timestamp")
-    BigDecimal sumTransactionsUpTo(@Param("walletId") UUID walletId, @Param("timestamp") LocalDateTime timestamp);
     
     List<Transaction> findByWalletIdOrderByCreatedAtDesc(UUID walletId);
 }
