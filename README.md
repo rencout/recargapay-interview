@@ -52,27 +52,68 @@ export DB_PASSWORD=your_password
 
 ## Building and Running
 
-### Start the database
+### Prerequisites Check
+Ensure you have the following installed:
+- Java 17 or higher: `java -version`
+- Docker and Docker Compose: `docker --version` and `docker-compose --version`
+
+### Start the Database
 ```bash
+# Start PostgreSQL database using Docker
 docker-compose up -d
+
+# Verify the database is running
+docker-compose ps
+```
+
+### Set Environment Variables (Optional)
+The application uses default database credentials, but you can override them:
+```bash
+# On Unix/Linux/macOS
+export DB_USERNAME=postgres
+export DB_PASSWORD=password
+
+# On Windows PowerShell
+$env:DB_USERNAME="postgres"
+$env:DB_PASSWORD="password"
+
+# On Windows Command Prompt
+set DB_USERNAME=postgres
+set DB_PASSWORD=password
 ```
 
 ### Build the Application
 ```bash
+# On Unix/Linux/macOS
 ./gradlew build
+
+# On Windows
+./gradlew.bat build
 ```
 
 ### Run the Application
 ```bash
+# On Unix/Linux/macOS
 ./gradlew bootRun
+
+# On Windows
+./gradlew.bat bootRun
 ```
 
-The application will start on ` http://localhost:8080/swagger-ui.html`
+The application will start on `http://localhost:8080`
+
+### Verify the Application
+1. Check if the application is running: `http://localhost:8080/actuator/health` (if actuator is added)
+2. Access Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+3. View API documentation: `http://localhost:8080/api-docs`
 
 ### Run Tests
 ```bash
 # Run all tests
 ./gradlew test
+
+# On Windows
+./gradlew.bat test
 
 # Run only unit tests
 ./gradlew test --tests "*Test"
@@ -84,7 +125,7 @@ The application will start on ` http://localhost:8080/swagger-ui.html`
 ## API Documentation
 
 Once the application is running, you can access the Swagger UI at:
-`http://localhost:8080/swagger-ui.html`
+`http://localhost:8080/swagger-ui/index.html`
 
 ### API Endpoints
 
