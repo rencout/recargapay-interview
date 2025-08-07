@@ -34,18 +34,17 @@ public class WalletMapper {
         if (wallet == null) {
             return null;
         }
-        
-        BalanceResponse response = new BalanceResponse();
-        response.setWalletId(wallet.getId());
-        response.setBalance(wallet.getBalance());
-        response.setBalanceAfter(wallet.getBalance());
-        return response;
+        return toBalanceResponse(wallet.getId(), wallet.getBalance(), wallet.getBalance());
     }
     
     /**
      * Creates a BalanceResponse with custom balance values
      */
     public BalanceResponse toBalanceResponse(UUID walletId, java.math.BigDecimal balance, java.math.BigDecimal balanceAfter) {
+        if (walletId == null) {
+            return null;
+        }
+        
         BalanceResponse response = new BalanceResponse();
         response.setWalletId(walletId);
         response.setBalance(balance);

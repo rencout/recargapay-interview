@@ -43,8 +43,7 @@ public class WalletService {
     public BalanceResponse getCurrentBalance(UUID walletId) {
         log.info("Getting current balance for wallet: {}", walletId);
         Wallet wallet = findWalletById(walletId);
-        BigDecimal currentBalance = MoneyUtils.format(wallet.getBalance());
-        log.info("Current balance for wallet {}: {}", walletId, currentBalance);
+        log.info("Current balance for wallet {}: {}", walletId, wallet.getBalance());
         
         return walletMapper.toBalanceResponse(wallet);
     }
@@ -71,49 +70,13 @@ public class WalletService {
     @Transactional
     public BalanceResponse deposit(UUID walletId, BigDecimal amount) {
         log.info("Processing deposit of {} for wallet: {}", amount, walletId);
-        
-        return executeWithRetry(() -> {
-            Wallet wallet = findWalletById(walletId);
-            BigDecimal newBalance = MoneyUtils.add(wallet.getBalance(), amount);
-            wallet.setBalance(newBalance);
-            Wallet savedWallet = walletRepository.save(wallet);
-            
-            // Create transaction record
-            Transaction transaction = new Transaction(wallet, TransactionType.DEPOSIT, amount, newBalance);
-            transactionRepository.save(transaction);
-            
-            log.info("Deposit completed. New balance: {}", newBalance);
-            
-            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
-        });
+        return processTransaction(walletId, amount, TransactionType.DEPOSIT, false);
     }
 
     @Transactional
     public BalanceResponse withdraw(UUID walletId, BigDecimal amount) {
         log.info("Processing withdrawal of {} for wallet: {}", amount, walletId);
-        
-        return executeWithRetry(() -> {
-            Wallet wallet = findWalletById(walletId);
-            
-            if (wallet.getBalance().compareTo(amount) < 0) {
-                throw new InsufficientFundsException(
-                    String.format(WalletConstants.INSUFFICIENT_FUNDS_FORMAT, 
-                        wallet.getBalance(), amount)
-                );
-            }
-            
-            BigDecimal newBalance = MoneyUtils.subtract(wallet.getBalance(), amount);
-            wallet.setBalance(newBalance);
-            Wallet savedWallet = walletRepository.save(wallet);
-            
-            // Create transaction record
-            Transaction transaction = new Transaction(wallet, TransactionType.WITHDRAW, amount, newBalance);
-            transactionRepository.save(transaction);
-            
-            log.info("Withdrawal completed. New balance: {}", newBalance);
-            
-            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
-        });
+        return processTransaction(walletId, amount, TransactionType.WITHDRAW, true);
     }
 
     @Transactional
@@ -186,5 +149,34 @@ public class WalletService {
         }
         
         throw new RuntimeException("Unexpected error during retry");
+    }
+
+    private BalanceResponse processTransaction(UUID walletId, BigDecimal amount, 
+                                             TransactionType type, boolean isDebit) {
+        return executeWithRetry(() -> {
+            Wallet wallet = findWalletById(walletId);
+            
+            if (isDebit && wallet.getBalance().compareTo(amount) < 0) {
+                throw new InsufficientFundsException(
+                    String.format(WalletConstants.INSUFFICIENT_FUNDS_FORMAT, 
+                        wallet.getBalance(), amount)
+                );
+            }
+            
+            BigDecimal newBalance = isDebit 
+                ? MoneyUtils.subtract(wallet.getBalance(), amount)
+                : MoneyUtils.add(wallet.getBalance(), amount);
+            
+            wallet.setBalance(newBalance);
+            Wallet savedWallet = walletRepository.save(wallet);
+            
+            // Create transaction record
+            Transaction transaction = new Transaction(wallet, type, amount, newBalance);
+            transactionRepository.save(transaction);
+            
+            log.info("{} completed. New balance: {}", type, newBalance);
+            
+            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
+        });
     }
 }
