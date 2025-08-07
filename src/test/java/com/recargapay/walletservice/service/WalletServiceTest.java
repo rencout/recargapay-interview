@@ -107,6 +107,7 @@ class WalletServiceTest {
         // Given
         LocalDateTime timestamp = LocalDateTime.now();
         Transaction transaction = new Transaction(wallet, TransactionType.DEPOSIT, BigDecimal.valueOf(50.00), BigDecimal.valueOf(150.00));
+        when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
         when(transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp))
                 .thenReturn(Optional.of(transaction));
 
@@ -125,17 +126,15 @@ class WalletServiceTest {
         LocalDateTime timestamp = LocalDateTime.now();
         when(transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp))
                 .thenReturn(Optional.empty());
-        when(transactionRepository.sumTransactionsUpTo(walletId, timestamp))
-                .thenReturn(BigDecimal.valueOf(75.00));
         when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
 
         // When
         BigDecimal result = walletService.getHistoricalBalance(walletId, timestamp);
 
         // Then
-        assertEquals(MoneyUtils.format(BigDecimal.valueOf(75.00)), result);
+        assertEquals(MoneyUtils.zero(), result);
         verify(transactionRepository).findLastTransactionBeforeOrAt(walletId, timestamp);
-        verify(transactionRepository).sumTransactionsUpTo(walletId, timestamp);
+        verify(transactionRepository, never()).sumTransactionsUpTo(any(), any());
     }
 
     @Test

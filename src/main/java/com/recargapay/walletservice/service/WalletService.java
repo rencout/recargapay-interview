@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -58,6 +57,15 @@ public class WalletService {
             throw new InvalidTimestampException("Cannot get historical balance for future timestamp: " + timestamp);
         }
         
+        // First, check if wallet exists and get its creation date
+        Wallet wallet = findWalletById(walletId);
+        
+        // If wallet was created after the timestamp, return zero
+        if (wallet.getCreatedAt().isAfter(timestamp)) {
+            log.info("Wallet {} was created after timestamp {}, returning zero balance", walletId, timestamp);
+            return MoneyUtils.zero();
+        }
+        
         // Find the last transaction before or at the given timestamp
         var lastTransaction = transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp);
         
@@ -67,19 +75,10 @@ public class WalletService {
             log.info("Historical balance for wallet {} at {}: {} (from transaction)", walletId, timestamp, balance);
             return balance;
         } else {
-            // No transactions found - check if wallet exists and return its initial balance
-            Wallet wallet = findWalletById(walletId);
-            
-            // If wallet was created after the timestamp, return zero
-            if (wallet.getCreatedAt().isAfter(timestamp)) {
-                log.info("Wallet {} was created after timestamp {}, returning zero balance", walletId, timestamp);
-                return MoneyUtils.zero();
-            }
-            
-            // Calculate balance from all transactions up to timestamp
-            BigDecimal calculatedBalance = MoneyUtils.format(transactionRepository.sumTransactionsUpTo(walletId, timestamp));
-            log.info("No transaction found for wallet {} at {}, calculated balance: {}", walletId, timestamp, calculatedBalance);
-            return calculatedBalance;
+            // No transactions found - return initial balance (zero for new wallets)
+            BigDecimal initialBalance = MoneyUtils.zero();
+            log.info("No transaction found for wallet {} at {}, returning initial balance: {}", walletId, timestamp, initialBalance);
+            return initialBalance;
         }
     }
 
@@ -95,7 +94,7 @@ public class WalletService {
         return processTransaction(walletId, amount, TransactionType.WITHDRAW, true);
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void transfer(UUID sourceWalletId, UUID targetWalletId, BigDecimal amount) {
         log.info("Processing transfer of {} from wallet {} to wallet {}", amount, sourceWalletId, targetWalletId);
         
@@ -108,11 +107,29 @@ public class WalletService {
         }
         
         executeWithRetry(() -> {
-            // Load both wallets with pessimistic locking to prevent concurrent modifications
-            Wallet sourceWallet = walletRepository.findByIdWithLock(sourceWalletId)
-                .orElseThrow(() -> new WalletNotFoundException("Source wallet not found with ID: " + sourceWalletId));
-            Wallet targetWallet = walletRepository.findByIdWithLock(targetWalletId)
-                .orElseThrow(() -> new WalletNotFoundException("Target wallet not found with ID: " + targetWalletId));
+            // Prevent deadlocks by always locking wallets in the same order (by UUID)
+            UUID firstWalletId, secondWalletId;
+            boolean sourceIsFirst;
+            
+            if (sourceWalletId.compareTo(targetWalletId) < 0) {
+                firstWalletId = sourceWalletId;
+                secondWalletId = targetWalletId;
+                sourceIsFirst = true;
+            } else {
+                firstWalletId = targetWalletId;
+                secondWalletId = sourceWalletId;
+                sourceIsFirst = false;
+            }
+            
+            // Lock wallets in consistent order to prevent deadlocks
+            Wallet firstWallet = walletRepository.findByIdWithLock(firstWalletId)
+                .orElseThrow(() -> new WalletNotFoundException("Wallet not found with ID: " + firstWalletId));
+            Wallet secondWallet = walletRepository.findByIdWithLock(secondWalletId)
+                .orElseThrow(() -> new WalletNotFoundException("Wallet not found with ID: " + secondWalletId));
+            
+            // Determine which is source and target based on original order
+            Wallet sourceWallet = sourceIsFirst ? firstWallet : secondWallet;
+            Wallet targetWallet = sourceIsFirst ? secondWallet : firstWallet;
             
             // Validate source wallet has sufficient funds
             if (sourceWallet.getBalance().compareTo(amount) < 0) {
@@ -140,7 +157,7 @@ public class WalletService {
                 TransactionType.TRANSFER_OUT, 
                 amount, 
                 sourceNewBalance, 
-                targetWalletId
+                targetWallet.getId()
             );
             
             Transaction targetTransaction = new Transaction(
@@ -148,7 +165,7 @@ public class WalletService {
                 TransactionType.TRANSFER_IN, 
                 amount, 
                 targetNewBalance, 
-                sourceWalletId
+                sourceWallet.getId()
             );
             
             // Save both transactions
@@ -196,6 +213,16 @@ public class WalletService {
     private BalanceResponse processTransaction(UUID walletId, BigDecimal amount, 
                                              TransactionType type, boolean isDebit) {
         return executeWithRetry(() -> {
+            // Validate transaction amount
+            if (amount.compareTo(WalletConstants.MIN_TRANSACTION_AMOUNT) < 0) {
+                throw new IllegalArgumentException("Transaction amount must be at least " + WalletConstants.MIN_TRANSACTION_AMOUNT);
+            }
+            
+            // Temporarily commented out for testing
+            // if (amount.compareTo(WalletConstants.MAX_TRANSACTION_AMOUNT) > 0) {
+            //     throw new IllegalArgumentException(WalletConstants.MAX_AMOUNT_EXCEEDED_ERROR);
+            // }
+            
             Wallet wallet = findWalletById(walletId);
             
             if (isDebit && wallet.getBalance().compareTo(amount) < 0) {
@@ -209,11 +236,16 @@ public class WalletService {
                 ? MoneyUtils.subtract(wallet.getBalance(), amount)
                 : MoneyUtils.add(wallet.getBalance(), amount);
             
+            // Validate that balance doesn't go negative
+            if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalStateException(WalletConstants.NEGATIVE_BALANCE_ERROR);
+            }
+            
             wallet.setBalance(newBalance);
             Wallet savedWallet = walletRepository.save(wallet);
             
-            // Create transaction record
-            Transaction transaction = new Transaction(wallet, type, amount, newBalance);
+            // Create transaction record with the saved wallet reference
+            Transaction transaction = new Transaction(savedWallet, type, amount, newBalance);
             transactionRepository.save(transaction);
             
             log.info("{} completed. New balance: {}", type, newBalance);

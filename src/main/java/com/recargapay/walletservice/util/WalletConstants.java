@@ -11,6 +11,11 @@ public final class WalletConstants {
     // Money constants
     public static final BigDecimal MIN_TRANSACTION_AMOUNT = BigDecimal.valueOf(0.01);
     public static final BigDecimal DEFAULT_TEST_AMOUNT = BigDecimal.valueOf(100.00);
+    public static final BigDecimal MAX_TRANSACTION_AMOUNT = BigDecimal.valueOf(999999999.99);
+    
+    // Business rules
+    public static final String NEGATIVE_BALANCE_ERROR = "Wallet balance cannot be negative";
+    public static final String MAX_AMOUNT_EXCEEDED_ERROR = "Transaction amount exceeds maximum allowed";
     
     // Validation messages
     public static final String AMOUNT_REQUIRED_MESSAGE = "Amount is required";
