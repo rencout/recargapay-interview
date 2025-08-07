@@ -407,7 +407,7 @@ Content-Type: application/json
 
 #### Transfer Funds
 ```http
-POST /api/transfer
+POST /api/wallets/transfer
 Content-Type: application/json
 
 {
