@@ -12,6 +12,4 @@ public class BalanceResponse {
     private UUID walletId;
     
     private BigDecimal balance;
-    
-    private BigDecimal balanceAfter;
 }

@@ -41,7 +41,7 @@ public class WalletService {
     public BalanceResponse getCurrentBalance(UUID walletId) {
         log.info("Getting current balance for wallet: {}", walletId);
         Wallet wallet = findWalletById(walletId);
-        return walletMapper.toBalanceResponse(wallet);
+        return walletMapper.toBalanceResponse(wallet.getId(), wallet.getBalance());
     }
 
     @Transactional(readOnly = true)
@@ -62,13 +62,7 @@ public class WalletService {
             Wallet wallet = findWalletById(walletId);
             BigDecimal newBalance = wallet.getBalance().add(amount);
             
-            wallet.setBalance(newBalance);
-            Wallet savedWallet = walletRepository.save(wallet);
-            
-            createTransaction(wallet, TransactionType.DEPOSIT, amount, newBalance);
-            
-            log.info("Deposit completed. New balance: {}", newBalance);
-            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
+            return processTransaction(wallet, TransactionType.DEPOSIT, amount, newBalance, "Deposit");
         });
     }
 
@@ -80,13 +74,7 @@ public class WalletService {
             ValidationUtils.validateSufficientFunds(wallet, amount);
             
             BigDecimal newBalance = wallet.getBalance().subtract(amount);
-            wallet.setBalance(newBalance);
-            Wallet savedWallet = walletRepository.save(wallet);
-            
-            createTransaction(wallet, TransactionType.WITHDRAW, amount, newBalance);
-            
-            log.info("Withdrawal completed. New balance: {}", newBalance);
-            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
+            return processTransaction(wallet, TransactionType.WITHDRAW, amount, newBalance, "Withdrawal");
         });
     }
 
@@ -174,6 +162,17 @@ public class WalletService {
         createTransferTransactions(sourceWallet, targetWallet, amount, sourceNewBalance, targetNewBalance);
         
         log.info("Transfer completed. Source balance: {}, Target balance: {}", sourceNewBalance, targetNewBalance);
+    }
+
+    private BalanceResponse processTransaction(Wallet wallet, TransactionType type, BigDecimal amount, 
+                                             BigDecimal newBalance, String operationName) {
+        wallet.setBalance(newBalance);
+        Wallet savedWallet = walletRepository.save(wallet);
+        
+        createTransaction(wallet, type, amount, newBalance);
+        
+        log.info("{} completed. New balance: {}", operationName, newBalance);
+        return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance());
     }
 
     private void createTransaction(Wallet wallet, TransactionType type, BigDecimal amount, BigDecimal balanceAfter) {

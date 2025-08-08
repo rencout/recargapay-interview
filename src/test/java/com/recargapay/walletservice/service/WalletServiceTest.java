@@ -81,9 +81,8 @@ class WalletServiceTest {
         BalanceResponse expectedResponse = BalanceResponse.builder()
                 .walletId(walletId)
                 .balance(MoneyUtils.format(BigDecimal.valueOf(100.00)))
-                .balanceAfter(MoneyUtils.format(BigDecimal.valueOf(100.00)))
                 .build();
-        when(walletMapper.toBalanceResponse(wallet)).thenReturn(expectedResponse);
+        when(walletMapper.toBalanceResponse(any(), any())).thenReturn(expectedResponse);
 
         // When
         BalanceResponse result = walletService.getCurrentBalance(walletId);
@@ -140,9 +139,9 @@ class WalletServiceTest {
         
         BalanceResponse expectedResponse = BalanceResponse.builder()
                 .walletId(walletId)
-                .balanceAfter(MoneyUtils.format(BigDecimal.valueOf(150.00)))
+                .balance(MoneyUtils.format(BigDecimal.valueOf(150.00)))
                 .build();
-        when(walletMapper.toBalanceResponse(any(), any(), any())).thenReturn(expectedResponse);
+        when(walletMapper.toBalanceResponse(any(), any())).thenReturn(expectedResponse);
 
         // When
         BalanceResponse result = walletService.deposit(walletId, amount);
@@ -150,7 +149,7 @@ class WalletServiceTest {
         // Then
         assertNotNull(result);
         assertEquals(walletId, result.getWalletId());
-        assertEquals(MoneyUtils.format(BigDecimal.valueOf(150.00)), result.getBalanceAfter());
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(150.00)), result.getBalance());
         verify(walletRepository).save(any(Wallet.class));
         verify(transactionRepository).save(any(Transaction.class));
     }
@@ -165,9 +164,9 @@ class WalletServiceTest {
         
         BalanceResponse expectedResponse = BalanceResponse.builder()
                 .walletId(walletId)
-                .balanceAfter(MoneyUtils.format(BigDecimal.valueOf(70.00)))
+                .balance(MoneyUtils.format(BigDecimal.valueOf(70.00)))
                 .build();
-        when(walletMapper.toBalanceResponse(any(), any(), any())).thenReturn(expectedResponse);
+        when(walletMapper.toBalanceResponse(any(), any())).thenReturn(expectedResponse);
 
         // When
         BalanceResponse result = walletService.withdraw(walletId, amount);
@@ -175,7 +174,7 @@ class WalletServiceTest {
         // Then
         assertNotNull(result);
         assertEquals(walletId, result.getWalletId());
-        assertEquals(MoneyUtils.format(BigDecimal.valueOf(70.00)), result.getBalanceAfter());
+        assertEquals(MoneyUtils.format(BigDecimal.valueOf(70.00)), result.getBalance());
         verify(walletRepository).save(any(Wallet.class));
         verify(transactionRepository).save(any(Transaction.class));
     }

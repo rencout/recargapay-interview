@@ -124,7 +124,7 @@ class WalletControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(depositRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.walletId").value(walletId))
-                .andExpect(jsonPath("$.balanceAfter").value(100.00));
+                .andExpect(jsonPath("$.balance").value(100.00));
     }
 
     @Test
@@ -163,7 +163,7 @@ class WalletControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(withdrawRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.walletId").value(walletId))
-                .andExpect(jsonPath("$.balanceAfter").value(70.00));
+                .andExpect(jsonPath("$.balance").value(70.00));
     }
 
     @Test

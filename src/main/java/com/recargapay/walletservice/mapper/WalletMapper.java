@@ -28,19 +28,9 @@ public class WalletMapper {
     }
     
     /**
-     * Maps a Wallet entity to BalanceResponse DTO
+     * Creates a BalanceResponse with wallet ID and balance
      */
-    public BalanceResponse toBalanceResponse(Wallet wallet) {
-        if (wallet == null) {
-            return null;
-        }
-        return toBalanceResponse(wallet.getId(), wallet.getBalance(), wallet.getBalance());
-    }
-    
-    /**
-     * Creates a BalanceResponse with custom balance values
-     */
-    public BalanceResponse toBalanceResponse(UUID walletId, java.math.BigDecimal balance, java.math.BigDecimal balanceAfter) {
+    public BalanceResponse toBalanceResponse(UUID walletId, java.math.BigDecimal balance) {
         if (walletId == null) {
             return null;
         }
@@ -48,7 +38,6 @@ public class WalletMapper {
         return BalanceResponse.builder()
                 .walletId(walletId)
                 .balance(balance)
-                .balanceAfter(balanceAfter)
                 .build();
     }
 }
