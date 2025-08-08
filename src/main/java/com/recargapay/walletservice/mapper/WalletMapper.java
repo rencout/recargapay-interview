@@ -18,13 +18,13 @@ public class WalletMapper {
             return null;
         }
         
-        WalletResponse response = new WalletResponse();
-        response.setId(wallet.getId());
-        response.setUserId(wallet.getUserId());
-        response.setBalance(wallet.getBalance());
-        response.setCreatedAt(wallet.getCreatedAt());
-        response.setUpdatedAt(wallet.getUpdatedAt());
-        return response;
+        return WalletResponse.builder()
+                .id(wallet.getId())
+                .userId(wallet.getUserId())
+                .balance(wallet.getBalance())
+                .createdAt(wallet.getCreatedAt())
+                .updatedAt(wallet.getUpdatedAt())
+                .build();
     }
     
     /**
@@ -45,11 +45,11 @@ public class WalletMapper {
             return null;
         }
         
-        BalanceResponse response = new BalanceResponse();
-        response.setWalletId(walletId);
-        response.setBalance(balance);
-        response.setBalanceAfter(balanceAfter);
-        return response;
+        return BalanceResponse.builder()
+                .walletId(walletId)
+                .balance(balance)
+                .balanceAfter(balanceAfter)
+                .build();
     }
 }
 

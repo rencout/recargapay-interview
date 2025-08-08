@@ -1,321 +1,512 @@
 # Wallet Service
 
-A Spring Boot application for managing digital wallets with transaction history and balance tracking.
+A Spring Boot application for managing digital wallets with transaction history and balance tracking. This service provides a robust API for wallet operations including deposits, withdrawals, transfers, and historical balance queries.
 
-## Features
+## Table of Contents
 
-- Create and manage digital wallets
-- Deposit and withdraw funds
-- Transfer funds between wallets
-- Historical balance tracking
-- Optimistic locking for concurrency control
-- Comprehensive transaction audit trail
-- RESTful API with Swagger documentation
+- [Installation Instructions](#installation-instructions)
+- [How to Run the Service](#how-to-run-the-service)
+- [How to Test the Service](#how-to-test-the-service)
+- [Design Decisions](#design-decisions)
+- [Compromises and Trade-offs](#compromises-and-trade-offs)
+- [API Documentation](#api-documentation)
+- [Database Schema](#database-schema)
+- [Troubleshooting](#troubleshooting)
 
-## Technology Stack
+## Installation Instructions
 
-- **Java 17**
-- **Spring Boot 3.2.0**
-- **Spring Data JPA**
-- **PostgreSQL**
-- **Flyway** (Database migrations)
-- **Gradle** (Build tool)
-- **Lombok** (Reduces boilerplate code)
-- **Swagger/OpenAPI** (API documentation)
-- **TestContainers** (Integration testing)
+### Prerequisites
 
-## Prerequisites
+- **Java 17** or higher
+- **Gradle 8.5** or higher (included via Gradle Wrapper)
+- **PostgreSQL 15** or higher
+- **Docker** (for running tests with TestContainers)
 
-- Java 17 or higher
-- Gradle 8.5 or higher
-- PostgreSQL 15 or higher
-- Docker (for running tests with TestContainers)
+### Environment Setup
 
-## Database Setup
+1. **Install Java 17+**
+   ```bash
+   # On Windows (using Chocolatey)
+   choco install openjdk17
+   
+   # On macOS (using Homebrew)
+   brew install openjdk@17
+   
+   # On Ubuntu/Debian
+   sudo apt update
+   sudo apt install openjdk-17-jdk
+   ```
 
-1. Create a PostgreSQL database:
-```sql
-CREATE DATABASE wallet_service;
-```
+2. **Install PostgreSQL 15+**
+   ```bash
+   # On Windows (using Chocolatey)
+   choco install postgresql15
+   
+   # On macOS (using Homebrew)
+   brew install postgresql@15
+   
+   # On Ubuntu/Debian
+   sudo apt install postgresql-15
+   ```
 
-2. Create a user (optional, you can use the default postgres user):
-```sql
-CREATE USER wallet_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE wallet_service TO wallet_user;
-```
+3. **Install Docker** (for testing)
+   - Download from [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+   - Or use package managers:
+     ```bash
+     # On Windows/macOS: Use Docker Desktop
+     # On Ubuntu
+     sudo apt install docker.io docker-compose
+     ```
 
-3. Configure the database connection in `application.yml` or set environment variables:
+### Database Setup
+
+1. **Start PostgreSQL service**
+   ```bash
+   # Windows
+   net start postgresql-x64-15
+   
+   # macOS
+   brew services start postgresql@15
+   
+   # Ubuntu
+   sudo systemctl start postgresql
+   ```
+
+2. **Create database and user**
+   ```sql
+   -- Connect to PostgreSQL as superuser
+   psql -U postgres
+   
+   -- Create database
+   CREATE DATABASE wallet_service;
+   
+   -- Create user (optional)
+   CREATE USER wallet_user WITH PASSWORD 'your_password';
+   GRANT ALL PRIVILEGES ON DATABASE wallet_service TO wallet_user;
+   ```
+
+3. **Configure environment variables**
+   ```bash
+   # Windows (PowerShell)
+   $env:DB_USERNAME="wallet_user"
+   $env:DB_PASSWORD="your_password"
+   
+   # macOS/Linux
+   export DB_USERNAME=wallet_user
+   export DB_PASSWORD=your_password
+   ```
+
+### Alternative: Using Docker Compose
+
+For easier setup, you can use the provided Docker Compose file:
+
 ```bash
-export DB_USERNAME=wallet_user
-export DB_PASSWORD=your_password
+# Start PostgreSQL with Docker
+docker-compose up -d postgres
+
+# The database will be available at localhost:5432
+# Default credentials: postgres/password
 ```
 
-## Building and Running
+## How to Run the Service
 
-### Prerequisites Check
-Ensure you have the following installed:
-- Java 17 or higher: `java -version`
-- Docker and Docker Compose: `docker --version` and `docker-compose --version`
+### Option 1: Using Gradle (Recommended)
 
-### Start the Database
-```bash
-# Start PostgreSQL database using Docker
-docker-compose up -d
+1. **Build the application**
+   ```bash
+   ./gradlew build
+   ```
 
-# Verify the database is running
-docker-compose ps
+2. **Run the application**
+   ```bash
+   ./gradlew bootRun
+   ```
+
+3. **Access the application**
+   - API: http://localhost:8080
+   - Swagger UI: http://localhost:8080/swagger-ui.html
+
+### Option 2: Using Docker
+
+1. **Build Docker image**
+   ```bash
+   docker build -t wallet-service .
+   ```
+   
+2. **Run with Docker Compose**
+   ```bash
+   docker-compose up
+   ```
+
+### Environment Configuration
+
+The application uses the following configuration (from `application.yml`):
+
+- **Database**: PostgreSQL at `localhost:5432/wallet_service`
+- **Port**: 8080 (configurable via `server.port`)
+- **Logging**: DEBUG level for application classes
+- **API Documentation**: Swagger UI at `/swagger-ui.html`
+
+## How to Test the Service
+
+### Running Tests
+
+1. **Run all tests**
+   ```bash
+   ./gradlew test
+   ```
+
+2. **Run only unit tests**
+   ```bash
+   ./gradlew test --tests "*Test"
+   ```
+
+3. **Run only integration tests**
+   ```bash
+   ./gradlew test --tests "*IntegrationTest"
+   ```
+
+4. **Run tests with coverage**
+   ```bash
+   ./gradlew test jacocoTestReport
+   ```
+
+### Test Dependencies
+
+- **TestContainers**: Automatically starts PostgreSQL container for integration tests
+- **JUnit 5**: Unit and integration testing framework
+- **Mockito**: Mocking framework for unit tests
+
+### Test Structure
+
+- **Unit Tests**: `WalletServiceTest.java` - Tests business logic in isolation
+- **Integration Tests**: `WalletControllerIntegrationTest.java` - Tests full HTTP endpoints
+- **Test Configuration**: `application-test.yml` - Separate test database configuration
+
+### Manual Testing
+
+1. **Start the application**
+   ```bash
+   ./gradlew bootRun
+   ```
+
+2. **Use Swagger UI**
+   - Navigate to http://localhost:8080/swagger-ui.html
+   - Test endpoints directly from the browser
+
+3. **Use curl commands**
+   ```bash
+   # Create a wallet
+   curl -X POST http://localhost:8080/api/wallets \
+     -H "Content-Type: application/json" \
+     -d '{"userId": "user123"}'
+   
+   # Get balance
+   curl http://localhost:8080/api/wallets/{walletId}/balance
+   
+   # Deposit funds
+   curl -X POST http://localhost:8080/api/wallets/{walletId}/deposit \
+     -H "Content-Type: application/json" \
+     -d '{"amount": "100.00"}'
+   ```
+
+## Design Decisions
+
+### Architecture Overview
+
+The application follows a **layered architecture** with clear separation of concerns:
+
+```
+Controller Layer (REST API)
+    ↓
+Service Layer (Business Logic)
+    ↓
+Repository Layer (Data Access)
+    ↓
+Database Layer (PostgreSQL)
 ```
 
-### Set Environment Variables (Optional)
-The application uses default database credentials, but you can override them:
-```bash
-# On Unix/Linux/macOS
-export DB_USERNAME=postgres
-export DB_PASSWORD=password
+### Key Design Decisions
 
-# On Windows PowerShell
-$env:DB_USERNAME="postgres"
-$env:DB_PASSWORD="password"
+#### 1. **Technology Stack**
+- **Spring Boot 3.2.0**: Modern, production-ready framework
+- **Java 17**: Latest LTS version with enhanced performance
+- **PostgreSQL**: ACID-compliant database for financial transactions
+- **Flyway**: Database migration tool for version control
+- **Gradle**: Modern build tool with dependency management
 
-# On Windows Command Prompt
-set DB_USERNAME=postgres
-set DB_PASSWORD=password
-```
+#### 2. **Concurrency Control**
+- **Optimistic Locking**: Uses `@Version` annotation to prevent race conditions
+- **Retry Mechanism**: Implements exponential backoff for concurrent updates
+- **Transaction Isolation**: Uses `@Transactional` for atomic operations
 
-### Build the Application
-```bash
-# On Unix/Linux/macOS
-./gradlew build
+#### 3. **Data Integrity**
+- **Audit Trail**: Every operation creates a transaction record
+- **Historical Queries**: Supports point-in-time balance queries
+- **Validation**: Comprehensive input validation and business rule enforcement
 
-# On Windows
-./gradlew.bat build
-```
+#### 4. **API Design**
+- **RESTful**: Follows REST principles with proper HTTP status codes
+- **Swagger Documentation**: Auto-generated API documentation
+- **DTO Pattern**: Separate request/response objects for API contracts
 
-### Run the Application
-```bash
-# On Unix/Linux/macOS
-./gradlew bootRun
+### Functional Requirements Implementation
 
-# On Windows
-./gradlew.bat bootRun
-```
+#### ✅ **Wallet Management**
+- Create wallets with unique user IDs
+- Retrieve current balance with real-time accuracy
+- Support for historical balance queries at any point in time
 
-The application will start on `http://localhost:8080`
+#### ✅ **Transaction Operations**
+- **Deposits**: Add funds to wallet with balance validation
+- **Withdrawals**: Remove funds with insufficient funds check
+- **Transfers**: Atomic operations between wallets with rollback on failure
 
-### Verify the Application
-1. Check if the application is running: `http://localhost:8080/actuator/health` (if actuator is added)
-2. Access Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-3. View API documentation: `http://localhost:8080/api-docs`
+#### ✅ **Audit and Compliance**
+- Complete transaction history with timestamps
+- Balance tracking after each operation
+- Support for regulatory compliance requirements
 
-### Run Tests
-```bash
-# Run all tests
-./gradlew test
+### Non-Functional Requirements Implementation
 
-# On Windows
-./gradlew.bat test
+#### ✅ **Accuracy**
+- **BigDecimal**: Precise decimal arithmetic for financial calculations
+- **Optimistic Locking**: Prevents data corruption from concurrent updates
+- **Transaction Rollback**: Ensures consistency on failures
 
-# Run only unit tests
-./gradlew test --tests "*Test"
+#### ✅ **Auditability**
+- **Transaction Records**: Every operation logged with metadata
+- **Historical Queries**: Point-in-time balance reconstruction
+- **Audit Fields**: Created/updated timestamps on all entities
 
-# Run only integration tests
-./gradlew test --tests "*IntegrationTest"
-```
+#### ✅ **Scalability**
+- **Connection Pooling**: HikariCP for efficient database connections
+- **Indexed Queries**: Optimized database queries with proper indexing
+- **Stateless Design**: Horizontal scaling capability
+
+#### ✅ **Maintainability**
+- **Clean Architecture**: Separation of concerns
+- **Comprehensive Testing**: Unit and integration test coverage
+- **Documentation**: Swagger API docs and code comments
+
+## Compromises and Trade-offs
+
+### Time Constraints and Simplifications
+
+#### 1. **Authentication & Authorization**
+- **Compromise**: No authentication/authorization implemented
+- **Reason**: Focus on core business logic within time constraints
+- **Future Improvement**: Implement JWT-based authentication with role-based access
+
+#### 2. **Rate Limiting**
+- **Compromise**: No rate limiting on API endpoints
+- **Reason**: Core functionality prioritized over security features
+- **Future Improvement**: Implement rate limiting with Redis or similar
+
+#### 3. **Advanced Features**
+- **Compromise**: No webhook notifications or event sourcing
+- **Reason**: Scope limited to basic wallet operations
+- **Future Improvement**: Implement event-driven architecture with Kafka
+
+#### 4. **Performance Optimizations**
+- **Compromise**: No caching layer implemented
+- **Reason**: Focus on correctness over performance optimization
+- **Future Improvement**: Add Redis caching for frequently accessed data
+
+#### 5. **Monitoring & Observability**
+- **Compromise**: Basic logging only, no metrics or tracing
+- **Reason**: Core functionality prioritized
+- **Future Improvement**: Add Prometheus metrics and distributed tracing
+
+### Technical Trade-offs
+
+#### 1. **Database Design**
+- **Choice**: Single database with normalized schema
+- **Trade-off**: Simpler deployment vs. potential scaling limitations
+- **Alternative**: Microservices with separate databases per domain
+
+#### 2. **Concurrency Strategy**
+- **Choice**: Optimistic locking with retry mechanism
+- **Trade-off**: Better performance vs. potential retry overhead
+- **Alternative**: Pessimistic locking for critical operations
+
+#### 3. **Historical Data**
+- **Choice**: Transaction-based historical reconstruction
+- **Trade-off**: Accurate but potentially slower queries
+- **Alternative**: Separate historical balance table with snapshots
+
+### What Could Be Improved with More Time
+
+1. **Security Enhancements**
+   - JWT-based authentication
+   - Role-based access control
+   - API rate limiting
+   - Input sanitization and validation
+
+2. **Performance Optimizations**
+   - Redis caching layer
+   - Database query optimization
+   - Connection pooling tuning
+   - Async processing for non-critical operations
+
+3. **Operational Features**
+   - Health check endpoints
+   - Metrics and monitoring
+   - Distributed tracing
+   - Automated deployment pipelines
+
+4. **Advanced Features**
+   - Webhook notifications
+   - Event sourcing architecture
+   - Multi-currency support
+   - Batch processing capabilities
 
 ## API Documentation
 
-Once the application is running, you can access the Swagger UI at:
-`http://localhost:8080/swagger-ui/index.html`
-
-### API Endpoints
+### Core Endpoints
 
 #### Create Wallet
-- **POST** `/api/wallets`
-- **Description**: Creates a new wallet for a user
-- **Request Body**:
-```json
+```http
+POST /api/wallets
+Content-Type: application/json
+
 {
   "userId": "user123"
 }
 ```
-- **Response**:
-```json
-{
-  "id": "uuid",
-  "userId": "user123",
-  "balance": "0.00",
-  "createdAt": "2024-01-01T10:00:00",
-  "updatedAt": "2024-01-01T10:00:00"
-}
-```
 
 #### Get Current Balance
-- **GET** `/api/wallets/{walletId}/balance`
-- **Description**: Retrieves the current balance of a wallet
-- **Response**:
-```json
-{
-  "walletId": "uuid",
-  "balance": "100.00",
-  "balanceAfter": "100.00"
-}
+```http
+GET /api/wallets/{walletId}/balance
 ```
 
 #### Get Historical Balance
-- **GET** `/api/wallets/{walletId}/balance/history?timestamp=2024-01-01T10:00:00`
-- **Description**: Retrieves the balance of a wallet at a specific point in time
-- **Parameters**:
-  - `timestamp`: ISO 8601 formatted datetime
-- **Response**:
-```json
-{
-  "walletId": "uuid",
-  "balance": "75.00",
-  "balanceAfter": "75.00"
-}
+```http
+GET /api/wallets/{walletId}/balance/history?timestamp=2024-01-01T10:00:00
 ```
 
 #### Deposit Funds
-- **POST** `/api/wallets/{walletId}/deposit`
-- **Description**: Deposits funds into a wallet
-- **Request Body**:
-```json
+```http
+POST /api/wallets/{walletId}/deposit
+Content-Type: application/json
+
 {
-  "amount": "50.00"
-}
-```
-- **Response**:
-```json
-{
-  "walletId": "uuid",
-  "balance": "150.00",
-  "balanceAfter": "150.00"
+  "amount": "100.00"
 }
 ```
 
 #### Withdraw Funds
-- **POST** `/api/wallets/{walletId}/withdraw`
-- **Description**: Withdraws funds from a wallet
-- **Request Body**:
-```json
+```http
+POST /api/wallets/{walletId}/withdraw
+Content-Type: application/json
+
 {
-  "amount": "25.00"
-}
-```
-- **Response**:
-```json
-{
-  "walletId": "uuid",
-  "balance": "125.00",
-  "balanceAfter": "125.00"
+  "amount": "50.00"
 }
 ```
 
 #### Transfer Funds
-- **POST** `/api/transfer`
-- **Description**: Transfers funds between two wallets
-- **Request Body**:
-```json
+```http
+POST /api/wallets/transfer
+Content-Type: application/json
+
 {
   "sourceWalletId": "uuid1",
   "targetWalletId": "uuid2",
   "amount": "30.00"
 }
 ```
-- **Response**: 200 OK (no body)
+
+### Interactive Documentation
+
+Access the Swagger UI at: http://localhost:8080/swagger-ui.html
 
 ## Database Schema
 
 ### Wallets Table
-- `id` (UUID, Primary Key)
-- `user_id` (VARCHAR, Not Null)
-- `balance` (DECIMAL(19,2), Not Null, Default 0.00)
-- `version` (BIGINT, Not Null, Default 0) - Optimistic locking
-- `created_at` (TIMESTAMP, Not Null)
-- `updated_at` (TIMESTAMP, Not Null)
+```sql
+CREATE TABLE wallets (
+    id UUID PRIMARY KEY,
+    user_id VARCHAR NOT NULL,
+    balance DECIMAL(19,2) NOT NULL DEFAULT 0.00,
+    version BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+```
 
 ### Transactions Table
-- `id` (UUID, Primary Key)
-- `wallet_id` (UUID, Foreign Key to wallets.id)
-- `type` (VARCHAR(20), Not Null) - DEPOSIT, WITHDRAW, TRANSFER_IN, TRANSFER_OUT
-- `amount` (DECIMAL(19,2), Not Null)
-- `balance_after` (DECIMAL(19,2), Not Null)
-- `related_wallet_id` (UUID, Nullable, Foreign Key to wallets.id)
-- `created_at` (TIMESTAMP, Not Null)
-
-## Key Features
-
-### Concurrency Control
-- Uses optimistic locking with version field
-- Retry mechanism for handling concurrent updates
-- Prevents race conditions in balance updates
-
-### Transaction Audit Trail
-- Every operation creates a transaction record
-- Tracks balance after each operation
-- Supports historical balance queries
-
-### Error Handling
-- Global exception handler with proper HTTP status codes
-- Validation for request parameters
-- Custom exceptions for business logic errors
-
-### Testing
-- Unit tests for service layer
-- Integration tests with TestContainers
-- Comprehensive test coverage
-
-## Development
-
-### Project Structure
+```sql
+CREATE TABLE transactions (
+    id UUID PRIMARY KEY,
+    wallet_id UUID REFERENCES wallets(id),
+    type VARCHAR(20) NOT NULL,
+    amount DECIMAL(19,2) NOT NULL,
+    balance_after DECIMAL(19,2) NOT NULL,
+    related_wallet_id UUID REFERENCES wallets(id),
+    created_at TIMESTAMP NOT NULL
+);
 ```
-src/
-├── main/
-│   ├── java/com/recargapay/walletservice/
-│   │   ├── config/
-│   │   ├── controller/
-│   │   ├── dto/
-│   │   ├── entity/
-│   │   ├── exception/
-│   │   ├── repository/
-│   │   └── service/
-│   └── resources/
-│       ├── db/migration/
-│       └── application.yml
-└── test/
-    └── java/com/recargapay/walletservice/
-        ├── controller/
-        └── service/
-```
-
-### Adding New Features
-1. Create entity classes in the `entity` package
-2. Create DTOs in the `dto` package
-3. Create repository interfaces in the `repository` package
-4. Implement business logic in the `service` package
-5. Create REST endpoints in the `controller` package
-6. Add appropriate tests
-7. Create Flyway migration if needed
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Database Connection Error**
-   - Ensure PostgreSQL is running
-   - Check database credentials in `application.yml`
-   - Verify database exists
+#### 1. **Database Connection Error**
+```bash
+# Check PostgreSQL is running
+sudo systemctl status postgresql
 
-2. **Port Already in Use**
-   - Change the port in `application.yml`:
-   ```yaml
-   server:
-     port: 8081
-   ```
+# Verify database exists
+psql -U postgres -d wallet_service -c "SELECT 1;"
 
-3. **Test Failures**
-   - Ensure Docker is running (required for TestContainers)
-   - Check that PostgreSQL container can be started
+# Check connection settings in application.yml
+```
+
+#### 2. **Port Already in Use**
+```bash
+# Change port in application.yml
+server:
+  port: 8081
+
+# Or kill process using port 8080
+netstat -ano | findstr :8080
+taskkill /PID <PID> /F
+```
+
+#### 3. **Test Failures**
+```bash
+# Ensure Docker is running
+docker --version
+
+# Check TestContainers can start PostgreSQL
+docker run --rm postgres:15-alpine echo "Docker works"
+```
+
+#### 4. **Build Failures**
+```bash
+# Clean and rebuild
+./gradlew clean build
+
+# Check Java version
+java -version
+
+# Verify Gradle wrapper
+./gradlew --version
+```
+
+### Logs and Debugging
+
+```bash
+# Enable debug logging
+logging:
+  level:
+    com.recargapay.walletservice: DEBUG
+    org.springframework.transaction: DEBUG
+
+# View application logs
+./gradlew bootRun --debug
+```
 
 ## License
 
