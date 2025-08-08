@@ -132,7 +132,7 @@ docker-compose up -d postgres
    ```bash
    docker build -t wallet-service .
    ```
-
+   
 2. **Run with Docker Compose**
    ```bash
    docker-compose up

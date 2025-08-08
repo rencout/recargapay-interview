@@ -17,23 +17,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(WalletNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleWalletNotFoundException(WalletNotFoundException ex) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.NOT_FOUND.value(),
-            "Wallet not found",
-            ex.getMessage(),
-            LocalDateTime.now()
-        );
+        ErrorResponse error = createErrorResponse(HttpStatus.NOT_FOUND, "Wallet not found", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(InsufficientFundsException.class)
     public ResponseEntity<ErrorResponse> handleInsufficientFundsException(InsufficientFundsException ex) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.BAD_REQUEST.value(),
-            "Insufficient funds",
-            ex.getMessage(),
-            LocalDateTime.now()
-        );
+        ErrorResponse error = createErrorResponse(HttpStatus.BAD_REQUEST, "Insufficient funds", ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(InvalidTimestampException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidTimestampException(InvalidTimestampException ex) {
+        ErrorResponse error = createErrorResponse(HttpStatus.BAD_REQUEST, "Invalid timestamp", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
@@ -57,24 +53,23 @@ public class GlobalExceptionHandler {
             errors.put(fieldName, errorMessage);
         });
 
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.BAD_REQUEST.value(),
-            "Validation failed",
-            errors.toString(),
-            LocalDateTime.now()
-        );
+        ErrorResponse error = createErrorResponse(HttpStatus.BAD_REQUEST, "Validation failed", errors.toString());
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.INTERNAL_SERVER_ERROR.value(),
-            "Internal server error",
-            ex.getMessage(),
+        ErrorResponse error = createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private ErrorResponse createErrorResponse(HttpStatus status, String error, String message) {
+        return new ErrorResponse(
+            status.value(),
+            error,
+            message,
             LocalDateTime.now()
         );
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @Data

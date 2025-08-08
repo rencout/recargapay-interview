@@ -14,8 +14,13 @@ import java.util.UUID;
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
     
-    @Query("SELECT t FROM Transaction t WHERE t.wallet.id = :walletId AND t.createdAt <= :timestamp ORDER BY t.createdAt DESC LIMIT 1")
-    Optional<Transaction> findLastTransactionBeforeOrAt(@Param("walletId") UUID walletId, @Param("timestamp") LocalDateTime timestamp);
+    @Query("SELECT t FROM Transaction t WHERE t.wallet.id = :walletId AND t.createdAt <= :timestamp ORDER BY t.createdAt DESC")
+    List<Transaction> findTransactionsBeforeOrAt(@Param("walletId") UUID walletId, @Param("timestamp") LocalDateTime timestamp);
+    
+    default Optional<Transaction> findLastTransactionBeforeOrAt(UUID walletId, LocalDateTime timestamp) {
+        List<Transaction> transactions = findTransactionsBeforeOrAt(walletId, timestamp);
+        return transactions.isEmpty() ? Optional.empty() : Optional.of(transactions.get(0));
+    }
     
     List<Transaction> findByWalletIdOrderByCreatedAtDesc(UUID walletId);
 }

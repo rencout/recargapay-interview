@@ -2,6 +2,7 @@ package com.recargapay.walletservice.controller;
 
 import com.recargapay.walletservice.dto.*;
 import com.recargapay.walletservice.entity.Wallet;
+import com.recargapay.walletservice.mapper.WalletMapper;
 import com.recargapay.walletservice.service.WalletService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class WalletController {
 
     private final WalletService walletService;
+    private final WalletMapper walletMapper;
 
     @PostMapping
     @Operation(summary = "Create a new wallet", description = "Creates a new wallet for the specified user")

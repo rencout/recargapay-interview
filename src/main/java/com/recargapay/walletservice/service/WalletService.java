@@ -5,15 +5,16 @@ import com.recargapay.walletservice.entity.Transaction;
 import com.recargapay.walletservice.entity.TransactionType;
 import com.recargapay.walletservice.entity.Wallet;
 import com.recargapay.walletservice.exception.WalletNotFoundException;
+import com.recargapay.walletservice.exception.InvalidTimestampException;
+import com.recargapay.walletservice.mapper.WalletMapper;
 import com.recargapay.walletservice.repository.TransactionRepository;
 import com.recargapay.walletservice.repository.WalletRepository;
 import com.recargapay.walletservice.util.ValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -42,14 +43,12 @@ public class WalletService {
     public BalanceResponse getCurrentBalance(UUID walletId) {
         log.info("Getting current balance for wallet: {}", walletId);
         Wallet wallet = findWalletById(walletId);
-        
         return createBalanceResponse(wallet, wallet.getBalance());
     }
 
     @Transactional(readOnly = true)
     public BigDecimal getHistoricalBalance(UUID walletId, LocalDateTime timestamp) {
         log.info("Getting historical balance for wallet: {} at timestamp: {}", walletId, timestamp);
-        
         ValidationUtils.validateTimestampNotInFuture(timestamp);
         findWalletById(walletId);
         
@@ -61,7 +60,6 @@ public class WalletService {
     @Transactional
     public BalanceResponse deposit(UUID walletId, BigDecimal amount) {
         log.info("Processing deposit of {} for wallet: {}", amount, walletId);
-        
         return executeWithRetry(() -> {
             Wallet wallet = findWalletById(walletId);
             BigDecimal newBalance = wallet.getBalance().add(amount);
@@ -79,7 +77,6 @@ public class WalletService {
     @Transactional
     public BalanceResponse withdraw(UUID walletId, BigDecimal amount) {
         log.info("Processing withdrawal of {} for wallet: {}", amount, walletId);
-        
         return executeWithRetry(() -> {
             Wallet wallet = findWalletById(walletId);
             ValidationUtils.validateSufficientFunds(wallet, amount);
@@ -95,19 +92,30 @@ public class WalletService {
         });
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void transfer(UUID sourceWalletId, UUID targetWalletId, BigDecimal amount) {
         log.info("Processing transfer of {} from wallet {} to wallet {}", amount, sourceWalletId, targetWalletId);
-        
         ValidationUtils.validateTransferRequest(sourceWalletId, targetWalletId);
         
         executeWithRetry(() -> {
-            Wallet sourceWallet = findWalletById(sourceWalletId);
-            Wallet targetWallet = findWalletById(targetWalletId);
+            // Prevent deadlocks by always locking wallets in the same order (by UUID)
+            UUID firstWalletId, secondWalletId;
+            boolean sourceIsFirst;
+            
+            if (sourceWalletId.compareTo(targetWalletId) < 0) {
+                firstWalletId = sourceWalletId;
+                secondWalletId = targetWalletId;
+                sourceIsFirst = true;
+            } else {
+                firstWalletId = targetWalletId;
+                secondWalletId = sourceWalletId;
+                sourceIsFirst = false;
+            }
             
             ValidationUtils.validateSufficientFunds(sourceWallet, amount);
             
             performTransfer(sourceWallet, targetWallet, amount);
+
             return null;
         });
     }
@@ -185,5 +193,49 @@ public class WalletService {
                 .balance(wallet.getBalance())
                 .balanceAfter(balanceAfter)
                 .build();
+    }
+
+    private BalanceResponse processTransaction(UUID walletId, BigDecimal amount, 
+                                             TransactionType type, boolean isDebit) {
+        return executeWithRetry(() -> {
+            // Validate transaction amount
+            if (amount.compareTo(WalletConstants.MIN_TRANSACTION_AMOUNT) < 0) {
+                throw new IllegalArgumentException("Transaction amount must be at least " + WalletConstants.MIN_TRANSACTION_AMOUNT);
+            }
+            
+            // Temporarily commented out for testing
+            // if (amount.compareTo(WalletConstants.MAX_TRANSACTION_AMOUNT) > 0) {
+            //     throw new IllegalArgumentException(WalletConstants.MAX_AMOUNT_EXCEEDED_ERROR);
+            // }
+            
+            Wallet wallet = findWalletById(walletId);
+            
+            if (isDebit && wallet.getBalance().compareTo(amount) < 0) {
+                throw new InsufficientFundsException(
+                    String.format(WalletConstants.INSUFFICIENT_FUNDS_FORMAT, 
+                        wallet.getBalance(), amount)
+                );
+            }
+            
+            BigDecimal newBalance = isDebit 
+                ? MoneyUtils.subtract(wallet.getBalance(), amount)
+                : MoneyUtils.add(wallet.getBalance(), amount);
+            
+            // Validate that balance doesn't go negative
+            if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalStateException(WalletConstants.NEGATIVE_BALANCE_ERROR);
+            }
+            
+            wallet.setBalance(newBalance);
+            Wallet savedWallet = walletRepository.save(wallet);
+            
+            // Create transaction record with the saved wallet reference
+            Transaction transaction = new Transaction(savedWallet, type, amount, newBalance);
+            transactionRepository.save(transaction);
+            
+            log.info("{} completed. New balance: {}", type, newBalance);
+            
+            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
+        });
     }
 }

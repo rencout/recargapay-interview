@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.recargapay.walletservice.dto.CreateWalletRequest;
 import com.recargapay.walletservice.dto.TransactionRequest;
 import com.recargapay.walletservice.dto.TransferRequest;
+import com.recargapay.walletservice.util.WalletConstants;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -129,7 +130,7 @@ class WalletControllerIntegrationTest {
 
         // Then deposit funds
         TransactionRequest depositRequest = new TransactionRequest();
-        depositRequest.setAmount(BigDecimal.valueOf(100.00));
+        depositRequest.setAmount(WalletConstants.DEFAULT_TEST_AMOUNT);
 
         mockMvc.perform(post("/api/wallets/{walletId}/deposit", walletId)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -159,7 +160,7 @@ class WalletControllerIntegrationTest {
 
         // Deposit funds first
         TransactionRequest depositRequest = new TransactionRequest();
-        depositRequest.setAmount(BigDecimal.valueOf(100.00));
+        depositRequest.setAmount(WalletConstants.DEFAULT_TEST_AMOUNT);
 
         mockMvc.perform(post("/api/wallets/{walletId}/deposit", walletId)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -238,7 +239,7 @@ class WalletControllerIntegrationTest {
 
         // Deposit funds to source wallet
         TransactionRequest depositRequest = new TransactionRequest();
-        depositRequest.setAmount(BigDecimal.valueOf(100.00));
+        depositRequest.setAmount(WalletConstants.DEFAULT_TEST_AMOUNT);
 
         mockMvc.perform(post("/api/wallets/{walletId}/deposit", wallet1Id)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -275,7 +276,16 @@ class WalletControllerIntegrationTest {
 
         String walletId = objectMapper.readTree(createResponse).get("id").asText();
 
-        // Get historical balance
+        // Create a transaction first by making a deposit
+        TransactionRequest depositRequest = new TransactionRequest();
+        depositRequest.setAmount(BigDecimal.valueOf(100.00));
+
+        mockMvc.perform(post("/api/wallets/{walletId}/deposit", walletId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(depositRequest)))
+                .andExpect(status().isOk());
+
+        // Get historical balance after the transaction
         LocalDateTime timestamp = LocalDateTime.now();
         String formattedTimestamp = timestamp.format(DateTimeFormatter.ISO_DATE_TIME);
 

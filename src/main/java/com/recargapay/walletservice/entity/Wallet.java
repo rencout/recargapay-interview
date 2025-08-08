@@ -1,5 +1,6 @@
 package com.recargapay.walletservice.entity;
 
+import com.recargapay.walletservice.util.MoneyUtils;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -26,7 +27,7 @@ public class Wallet {
     private String userId;
 
     @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal balance = BigDecimal.ZERO;
+    private BigDecimal balance = MoneyUtils.zero();
 
     @Version
     @Column(name = "version")
@@ -42,6 +43,6 @@ public class Wallet {
 
     public Wallet(String userId) {
         this.userId = userId;
-        this.balance = BigDecimal.ZERO;
+        this.balance = MoneyUtils.zero();
     }
 }
