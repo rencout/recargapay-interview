@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -106,9 +107,10 @@ class WalletServiceTest {
     void getHistoricalBalance_Success() {
         // Given
         LocalDateTime timestamp = LocalDateTime.now();
+        LocalDate date = timestamp.toLocalDate();
         Transaction transaction = new Transaction(wallet, TransactionType.DEPOSIT, BigDecimal.valueOf(50.00), BigDecimal.valueOf(150.00));
         when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
-        when(transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp))
+        when(transactionRepository.findLastTransactionOnDate(walletId, date))
                 .thenReturn(Optional.of(transaction));
 
         // When
@@ -117,7 +119,7 @@ class WalletServiceTest {
         // Then
         assertEquals(BigDecimal.valueOf(150.00), result);
         verify(walletRepository).findById(walletId);
-        verify(transactionRepository).findLastTransactionBeforeOrAt(walletId, timestamp);
+        verify(transactionRepository).findLastTransactionOnDate(walletId, date);
     }
 
     @Test

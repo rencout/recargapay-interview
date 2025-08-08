@@ -385,6 +385,8 @@ GET /api/wallets/{walletId}/balance
 GET /api/wallets/{walletId}/balance/history?timestamp=2024-01-01T10:00:00
 ```
 
+**Note**: The historical balance endpoint compares only the **date part** of the timestamp. The result reflects the wallet's balance at the end of that specific day (the most recent transaction on that calendar day).
+
 #### Deposit Funds
 ```http
 POST /api/wallets/{walletId}/deposit

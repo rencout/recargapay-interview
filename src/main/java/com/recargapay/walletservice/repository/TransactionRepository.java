@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,11 +14,11 @@ import java.util.UUID;
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
     
-    @Query("SELECT t FROM Transaction t WHERE t.wallet.id = :walletId AND t.createdAt <= :timestamp ORDER BY t.createdAt DESC")
-    List<Transaction> findTransactionsBeforeOrAt(@Param("walletId") UUID walletId, @Param("timestamp") LocalDateTime timestamp);
+    @Query("SELECT t FROM Transaction t WHERE t.wallet.id = :walletId AND DATE(t.createdAt) = :date ORDER BY t.createdAt DESC")
+    List<Transaction> findTransactionsOnDate(@Param("walletId") UUID walletId, @Param("date") LocalDate date);
     
-    default Optional<Transaction> findLastTransactionBeforeOrAt(UUID walletId, LocalDateTime timestamp) {
-        List<Transaction> transactions = findTransactionsBeforeOrAt(walletId, timestamp);
+    default Optional<Transaction> findLastTransactionOnDate(UUID walletId, LocalDate date) {
+        List<Transaction> transactions = findTransactionsOnDate(walletId, date);
         return transactions.isEmpty() ? Optional.empty() : Optional.of(transactions.get(0));
     }
     

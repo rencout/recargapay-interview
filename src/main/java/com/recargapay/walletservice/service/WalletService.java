@@ -16,6 +16,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -50,7 +51,8 @@ public class WalletService {
         ValidationUtils.validateTimestampNotInFuture(timestamp);
         findWalletById(walletId);
         
-        return transactionRepository.findLastTransactionBeforeOrAt(walletId, timestamp)
+        LocalDate date = timestamp.toLocalDate();
+        return transactionRepository.findLastTransactionOnDate(walletId, date)
                 .map(Transaction::getBalanceAfter)
                 .orElse(BigDecimal.ZERO);
     }
