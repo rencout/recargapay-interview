@@ -14,7 +14,6 @@ public class WalletResponse {
     private UUID id;
     private String userId;
     
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "0.00")
     private BigDecimal balance;
     
     private LocalDateTime createdAt;

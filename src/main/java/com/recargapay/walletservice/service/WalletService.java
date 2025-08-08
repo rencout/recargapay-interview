@@ -5,14 +5,14 @@ import com.recargapay.walletservice.entity.Transaction;
 import com.recargapay.walletservice.entity.TransactionType;
 import com.recargapay.walletservice.entity.Wallet;
 import com.recargapay.walletservice.exception.WalletNotFoundException;
-import com.recargapay.walletservice.exception.InvalidTimestampException;
 import com.recargapay.walletservice.mapper.WalletMapper;
 import com.recargapay.walletservice.repository.TransactionRepository;
 import com.recargapay.walletservice.repository.WalletRepository;
 import com.recargapay.walletservice.util.ValidationUtils;
+import com.recargapay.walletservice.util.WalletConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -27,9 +27,7 @@ public class WalletService {
 
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
-    private static final int MAX_RETRIES = 3;
-    private static final int RETRY_DELAY_MS = 100;
-
+    private final WalletMapper walletMapper;
     @Transactional
     public Wallet createWallet(String userId) {
         log.info("Creating wallet for user: {}", userId);
@@ -43,7 +41,7 @@ public class WalletService {
     public BalanceResponse getCurrentBalance(UUID walletId) {
         log.info("Getting current balance for wallet: {}", walletId);
         Wallet wallet = findWalletById(walletId);
-        return createBalanceResponse(wallet, wallet.getBalance());
+        return walletMapper.toBalanceResponse(wallet);
     }
 
     @Transactional(readOnly = true)
@@ -70,7 +68,7 @@ public class WalletService {
             createTransaction(wallet, TransactionType.DEPOSIT, amount, newBalance);
             
             log.info("Deposit completed. New balance: {}", newBalance);
-            return createBalanceResponse(savedWallet, newBalance);
+            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
         });
     }
 
@@ -88,7 +86,7 @@ public class WalletService {
             createTransaction(wallet, TransactionType.WITHDRAW, amount, newBalance);
             
             log.info("Withdrawal completed. New balance: {}", newBalance);
-            return createBalanceResponse(savedWallet, newBalance);
+            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
         });
     }
 
@@ -112,6 +110,13 @@ public class WalletService {
                 sourceIsFirst = false;
             }
             
+            // Find wallets in the correct order to prevent deadlocks
+            Wallet firstWallet = findWalletById(firstWalletId);
+            Wallet secondWallet = findWalletById(secondWalletId);
+            
+            Wallet sourceWallet = sourceIsFirst ? firstWallet : secondWallet;
+            Wallet targetWallet = sourceIsFirst ? secondWallet : firstWallet;
+            
             ValidationUtils.validateSufficientFunds(sourceWallet, amount);
             
             performTransfer(sourceWallet, targetWallet, amount);
@@ -126,7 +131,7 @@ public class WalletService {
     }
 
     private <T> T executeWithRetry(Supplier<T> operation) {
-        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        for (int attempt = 0; attempt < WalletConstants.MAX_RETRIES; attempt++) {
             try {
                 return operation.get();
             } catch (ObjectOptimisticLockingFailureException e) {
@@ -137,12 +142,12 @@ public class WalletService {
     }
 
     private void handleOptimisticLockingFailure(int attempt, ObjectOptimisticLockingFailureException e) {
-        if (attempt >= MAX_RETRIES - 1) {
+        if (attempt >= WalletConstants.MAX_RETRIES - 1) {
             log.error("Max retries reached for optimistic locking failure", e);
             throw e;
         }
-        log.warn("Optimistic locking failure, retrying... (attempt {}/{})", attempt + 1, MAX_RETRIES);
-        sleepWithInterruptHandling(RETRY_DELAY_MS * (attempt + 1));
+        log.warn("Optimistic locking failure, retrying... (attempt {}/{})", attempt + 1, WalletConstants.MAX_RETRIES);
+        sleepWithInterruptHandling(WalletConstants.RETRY_DELAY_MS * (attempt + 1));
     }
 
     private void sleepWithInterruptHandling(long delayMs) {
@@ -187,55 +192,7 @@ public class WalletService {
         transactionRepository.save(targetTransaction);
     }
 
-    private BalanceResponse createBalanceResponse(Wallet wallet, BigDecimal balanceAfter) {
-        return BalanceResponse.builder()
-                .walletId(wallet.getId())
-                .balance(wallet.getBalance())
-                .balanceAfter(balanceAfter)
-                .build();
-    }
 
-    private BalanceResponse processTransaction(UUID walletId, BigDecimal amount, 
-                                             TransactionType type, boolean isDebit) {
-        return executeWithRetry(() -> {
-            // Validate transaction amount
-            if (amount.compareTo(WalletConstants.MIN_TRANSACTION_AMOUNT) < 0) {
-                throw new IllegalArgumentException("Transaction amount must be at least " + WalletConstants.MIN_TRANSACTION_AMOUNT);
-            }
-            
-            // Temporarily commented out for testing
-            // if (amount.compareTo(WalletConstants.MAX_TRANSACTION_AMOUNT) > 0) {
-            //     throw new IllegalArgumentException(WalletConstants.MAX_AMOUNT_EXCEEDED_ERROR);
-            // }
-            
-            Wallet wallet = findWalletById(walletId);
-            
-            if (isDebit && wallet.getBalance().compareTo(amount) < 0) {
-                throw new InsufficientFundsException(
-                    String.format(WalletConstants.INSUFFICIENT_FUNDS_FORMAT, 
-                        wallet.getBalance(), amount)
-                );
-            }
-            
-            BigDecimal newBalance = isDebit 
-                ? MoneyUtils.subtract(wallet.getBalance(), amount)
-                : MoneyUtils.add(wallet.getBalance(), amount);
-            
-            // Validate that balance doesn't go negative
-            if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalStateException(WalletConstants.NEGATIVE_BALANCE_ERROR);
-            }
-            
-            wallet.setBalance(newBalance);
-            Wallet savedWallet = walletRepository.save(wallet);
-            
-            // Create transaction record with the saved wallet reference
-            Transaction transaction = new Transaction(savedWallet, type, amount, newBalance);
-            transactionRepository.save(transaction);
-            
-            log.info("{} completed. New balance: {}", type, newBalance);
-            
-            return walletMapper.toBalanceResponse(savedWallet.getId(), savedWallet.getBalance(), newBalance);
-        });
-    }
+
+
 }
